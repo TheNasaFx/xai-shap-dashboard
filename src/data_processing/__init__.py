@@ -13,13 +13,18 @@ Handles all data preprocessing operations including:
 Author: XAI-SHAP Framework
 """
 
-from src.data_processing.processor import DataProcessor
-from src.data_processing.bias_detector import BiasDetector
-from src.data_processing.transformers import (
-    MissingValueHandler,
-    CategoricalEncoder,
-    FeatureNormalizer
-)
+def __getattr__(name):
+    if name == "DataProcessor":
+        from src.data_processing.processor import DataProcessor
+        return DataProcessor
+    elif name == "BiasDetector":
+        from src.data_processing.bias_detector import BiasDetector
+        return BiasDetector
+    elif name in ("MissingValueHandler", "CategoricalEncoder", "FeatureNormalizer"):
+        from src.data_processing import transformers
+        return getattr(transformers, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "DataProcessor",

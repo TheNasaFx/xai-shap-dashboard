@@ -7,8 +7,18 @@ Model evaluation and Responsible AI metrics.
 Author: XAI-SHAP Framework
 """
 
-from src.evaluation.metrics import ModelEvaluator
-from src.evaluation.fairness import FairnessEvaluator, BiasDetector
+def __getattr__(name):
+    if name == "ModelEvaluator":
+        from src.evaluation.metrics import ModelEvaluator
+        return ModelEvaluator
+    elif name == "FairnessEvaluator":
+        from src.evaluation.fairness import FairnessEvaluator
+        return FairnessEvaluator
+    elif name == "BiasDetector":
+        from src.evaluation.fairness import BiasDetector
+        return BiasDetector
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "ModelEvaluator",

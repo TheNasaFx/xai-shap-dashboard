@@ -19,8 +19,16 @@ __version__ = "1.0.0"
 __author__ = "Diploma Project"
 __description__ = "Visual Analytics Framework for Explainable AI using SHAP"
 
-from src.core.framework import XAIFramework
-from src.core.pipeline import XAIPipeline
+
+def __getattr__(name):
+    if name == "XAIFramework":
+        from src.core.framework import XAIFramework
+        return XAIFramework
+    elif name == "XAIPipeline":
+        from src.core.pipeline import XAIPipeline
+        return XAIPipeline
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "XAIFramework",

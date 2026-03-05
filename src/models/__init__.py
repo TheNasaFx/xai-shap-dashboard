@@ -17,33 +17,6 @@ Machine learning model implementations including:
 Author: XAI-SHAP Framework
 """
 
-from src.models.trainer import ModelTrainer
-from src.models.base_model import BaseModel
-from src.models.random_forest_model import RandomForestModel
-
-# Conditionally import optional models
-try:
-    from src.models.xgboost_model import XGBoostModel
-except ImportError:
-    XGBoostModel = None
-
-try:
-    from src.models.neural_network_model import NeuralNetworkModel
-except ImportError:
-    NeuralNetworkModel = None
-
-__all__ = [
-    "ModelTrainer",
-    "BaseModel",
-    "RandomForestModel",
-]
-
-if XGBoostModel is not None:
-    __all__.append("XGBoostModel")
-if NeuralNetworkModel is not None:
-    __all__.append("NeuralNetworkModel")
-
-# Available model types
 AVAILABLE_MODELS = [
     "xgboost",
     "lightgbm", 
@@ -55,4 +28,39 @@ AVAILABLE_MODELS = [
     "neural_network",
     "logistic_regression",
     "svm"
+]
+
+
+def __getattr__(name):
+    if name == "ModelTrainer":
+        from src.models.trainer import ModelTrainer
+        return ModelTrainer
+    elif name == "BaseModel":
+        from src.models.base_model import BaseModel
+        return BaseModel
+    elif name == "RandomForestModel":
+        from src.models.random_forest_model import RandomForestModel
+        return RandomForestModel
+    elif name == "XGBoostModel":
+        try:
+            from src.models.xgboost_model import XGBoostModel
+            return XGBoostModel
+        except ImportError:
+            return None
+    elif name == "NeuralNetworkModel":
+        try:
+            from src.models.neural_network_model import NeuralNetworkModel
+            return NeuralNetworkModel
+        except ImportError:
+            return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+__all__ = [
+    "ModelTrainer",
+    "BaseModel",
+    "RandomForestModel",
+    "XGBoostModel",
+    "NeuralNetworkModel",
+    "AVAILABLE_MODELS",
 ]
