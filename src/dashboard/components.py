@@ -1,0 +1,1104 @@
+"""
+Dashboard Components - Мэргэжлийн UI бүрэлдэхүүнүүд
+====================================================
+
+Streamlit dashboard-д зориулсан дахин ашиглах боломжтой модуль бүрэлдэхүүнүүд.
+Мэргэжлийн дизайн, session state удирдлагатай.
+
+Зохиогч: XAI-SHAP Framework
+"""
+
+import logging
+from typing import Any, Dict, List, Optional
+import numpy as np
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================================
+# Professional Icon System (Unicode symbols - no emojis)
+# ============================================================================
+ICONS = {
+    "check": "●",       # Filled circle - success/active
+    "pending": "○",     # Empty circle - pending/inactive 
+    "data": "◈",        # Data/database
+    "model": "◆",       # Model/AI
+    "explain": "◇",     # Explanation
+    "chart": "▣",       # Visualization
+    "fairness": "◎",    # Fairness/balance
+    "settings": "⚙",    # Settings gear
+    "arrow": "→",       # Arrow right
+    "bullet": "•",      # Bullet point
+    "refresh": "↻",     # Refresh/reload
+    "upload": "↑",      # Upload
+    "download": "↓",    # Download
+    "play": "▶",        # Play/run
+    "target": "◉",      # Target/goal
+    "info": "ℹ",        # Information
+    "warning": "⚠",     # Warning
+    "up": "▲",          # Up arrow
+    "down": "▼",        # Down arrow
+}
+
+
+# ============================================================================
+# Custom CSS Styles
+# ============================================================================
+CUSTOM_CSS = """
+<style>
+/* Global Styles */
+.main { padding: 0rem 1rem; }
+.stPlotlyChart { width: 100%; }
+
+/* Status Card */
+.status-card {
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px;
+    margin: 8px 0;
+}
+
+.status-item {
+    margin-bottom: 12px;
+}
+
+.status-item:last-child {
+    margin-bottom: 0;
+}
+
+.status-label {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 500;
+    margin-bottom: 4px;
+}
+
+.status-active {
+    color: #10b981;
+    font-weight: 600;
+}
+
+.status-inactive {
+    color: #94a3b8;
+}
+
+/* Section Headers */
+.section-header {
+    color: #1e293b;
+    font-weight: 600;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+/* Info Box */
+.info-box {
+    background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+    border: 1px solid #93c5fd;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 8px 0;
+    font-size: 14px;
+    color: #1e40af;
+}
+
+/* Success Box */
+.success-box {
+    background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+    border: 1px solid #6ee7b7;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 8px 0;
+}
+
+/* Warning Box */
+.warning-box {
+    background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+    border: 1px solid #fcd34d;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 8px 0;
+}
+
+/* Metric Card */
+.metric-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.metric-label {
+    font-size: 0.875rem;
+    color: #64748b;
+    margin-top: 4px;
+}
+
+/* Help Text */
+.help-text {
+    font-size: 12px;
+    color: #64748b;
+    font-style: italic;
+    margin-top: 4px;
+}
+
+/* Feature List */
+.feature-positive {
+    color: #059669;
+}
+
+.feature-negative {
+    color: #dc2626;
+}
+</style>
+"""
+
+
+def inject_custom_css():
+    """Inject custom CSS into the app."""
+    import streamlit as st
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+def get_status_html(is_active: bool, active_text: str, inactive_text: str) -> str:
+    """Generate status indicator HTML."""
+    if is_active:
+        return f'<span class="status-active">{ICONS["check"]} {active_text}</span>'
+    return f'<span class="status-inactive">{ICONS["pending"]} {inactive_text}</span>'
+
+
+def render_sidebar():
+    """Хажуугийн самбарыг удирдлагуудтай харуулах."""
+    import streamlit as st
+    
+    st.header(f"{ICONS['settings']} Удирдлагууд")
+    
+    # Framework-ийн төлөв шалгаж session state-г синхрончлох
+    st.subheader("Системийн Төлөв")
+    
+    framework = st.session_state.get('framework')
+    
+    # Framework state-аас session state-г синхрончлох
+    data_loaded = st.session_state.get('data_loaded', False)
+    model_trained = st.session_state.get('model_trained', False)
+    shap_generated = st.session_state.get('explanations_generated', False)
+    
+    # Framework дээр өгөгдөл/загвар байвал session state-г шинэчлэх
+    if framework is not None:
+        if framework.X_train is not None and not data_loaded:
+            st.session_state['data_loaded'] = True
+            data_loaded = True
+        if framework.model is not None and not model_trained:
+            st.session_state['model_trained'] = True
+            model_trained = True
+        if framework.shap_values is not None and not shap_generated:
+            st.session_state['explanations_generated'] = True
+            shap_generated = True
+    
+    # Status card HTML
+    status_html = f"""
+    <div class="status-card">
+        <div class="status-item">
+            <div class="status-label">{ICONS['data']} Өгөгдөл</div>
+            {get_status_html(data_loaded, "Ачаалагдсан", "Ачаалаагүй")}
+        </div>
+        <div class="status-item">
+            <div class="status-label">{ICONS['model']} Загвар</div>
+            {get_status_html(model_trained, "Сургагдсан", "Сургаагүй")}
+        </div>
+        <div class="status-item">
+            <div class="status-label">{ICONS['explain']} SHAP</div>
+            {get_status_html(shap_generated, "Үүсгэгдсэн", "Үүсгэгдээгүй")}
+        </div>
+    </div>
+    """
+    st.markdown(status_html, unsafe_allow_html=True)
+    
+    st.divider()
+    
+    # Түргэн үйлдлүүд
+    st.subheader("Түргэн Үйлдлүүд")
+    
+    if st.button(f"{ICONS['refresh']} Бүгдийг Дахин Тохируулах", width='stretch'):
+        # Clear all session state except framework instance
+        keys_to_clear = ['data_loaded', 'model_trained', 'explanations_generated', 
+                         'uploaded_data', 'target_col', 'explanations']
+        for key in keys_to_clear:
+            if key in st.session_state:
+                del st.session_state[key]
+        # Reset framework
+        from src.core.framework import XAIFramework
+        st.session_state.framework = XAIFramework()
+        st.rerun()
+    
+    # Экспорт сонголтууд
+    st.subheader("Тайлан Экспорт")
+    
+    export_format = st.selectbox(
+        "Формат сонгох",
+        ["HTML", "PDF", "JSON"],
+        key="export_format",
+        help="Тайлангийн форматыг сонгоно уу"
+    )
+    
+    if st.button(f"{ICONS['download']} Тайлан Татах", width='stretch'):
+        st.info(f"{ICONS['info']} Тайлан экспортлох функц - тун удахгүй")
+    
+    st.divider()
+    
+    # Тухай хэсэг
+    st.subheader("Тухай")
+    st.markdown(f"""
+    **XAI-SHAP Framework**
+    
+    SHAP утгууд ашиглан тайлбарлах боломжтой AI-д зориулсан визуал аналитик систем.
+    
+    {ICONS['bullet']} Интерактив визуализациуд
+    
+    {ICONS['bullet']} Локал болон глобал тайлбарууд
+    
+    {ICONS['bullet']} Шударга байдлын шинжилгээ
+    """)
+
+
+def render_data_section():
+    """Өгөгдлийн тойм хэсгийг харуулах."""
+    import streamlit as st
+    
+    st.markdown(f"""
+    <div class="section-header">{ICONS['data']} Өгөгдлийн Тойм</div>
+    """, unsafe_allow_html=True)
+    
+    framework = st.session_state.get('framework')
+    
+    # Өгөгдөл аль хэдийн боловсруулагдсан бол мэдээлэл харуулах
+    data_loaded = st.session_state.get('data_loaded', False)
+    if data_loaded and framework is not None and framework.X_train is not None:
+        st.markdown(f"""
+        <div class="success-box">
+            <strong>{ICONS['check']} Өгөгдөл Боловсруулагдсан</strong><br/>
+            {ICONS['bullet']} Сургалтын дээжүүд: {len(framework.X_train):,}<br/>
+            {ICONS['bullet']} Тест дээжүүд: {len(framework.X_test):,}<br/>
+            {ICONS['bullet']} Шинж чанарууд: {len(framework.feature_names)}
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Файл байршуулах
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        uploaded_file = st.file_uploader(
+            "CSV файл байршуулах",
+            type=['csv'],
+            help="Өгөгдлийн багцаа CSV форматаар байршуулна уу. UTF-8 кодчилолтой файл шаардлагатай."
+        )
+    
+    with col2:
+        st.markdown("**Эсвэл жишээ өгөгдөл ашиглах:**")
+        use_sample = st.button(f"{ICONS['play']} Жишээ Өгөгдөл Ачаалах", width='stretch')
+    
+    if use_sample:
+        # Жишээ өгөгдлийн багц үүсгэх
+        from sklearn.datasets import make_classification
+        X, y = make_classification(
+            n_samples=1000, n_features=10, n_informative=5,
+            n_redundant=2, random_state=42
+        )
+        df = pd.DataFrame(X, columns=[f'feature_{i}' for i in range(10)])
+        df['target'] = y
+        st.session_state['uploaded_data'] = df
+        
+        # Шинэ өгөгдөл ачаалсан тул хуучин state-үүдийг цэвэрлэх
+        st.session_state['data_loaded'] = False
+        st.session_state['model_trained'] = False
+        st.session_state['explanations_generated'] = False
+        
+        st.success(f"{ICONS['check']} Жишээ өгөгдлийн багц ачаалагдлаа!")
+        st.rerun()  # UI шинэчлэх
+    
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.session_state['uploaded_data'] = df
+        
+        # Шинэ файл ачаалсан тул хуучин state-үүдийг цэвэрлэх
+        if st.session_state.get('model_trained', False):
+            st.session_state['data_loaded'] = False
+            st.session_state['model_trained'] = False
+            st.session_state['explanations_generated'] = False
+        st.success(f"{ICONS['check']} Өгөгдлийн багц ачаалагдлаа: {df.shape[0]} мөр, {df.shape[1]} багана")
+    
+    # Өгөгдөл харуулах
+    if 'uploaded_data' in st.session_state:
+        df = st.session_state['uploaded_data']
+        
+        st.subheader("Өгөгдлийн Урьдчилсан Харагдац")
+        st.dataframe(df.head(10), width='stretch')
+        
+        # Өгөгдлийн статистик
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric("Нийт Мөр", f"{df.shape[0]:,}")
+        with col2:
+            st.metric("Баганууд", df.shape[1])
+        with col3:
+            missing = df.isnull().sum().sum()
+            st.metric("Дутуу Утга", missing)
+        with col4:
+            numeric_cols = df.select_dtypes(include=[np.number]).columns
+            st.metric("Тоон Багана", len(numeric_cols))
+        
+        # Баганын мэдээлэл
+        with st.expander(f"{ICONS['info']} Баганын Дэлгэрэнгүй Мэдээлэл", expanded=False):
+            col_info = pd.DataFrame({
+                'Багана': df.columns.tolist(),
+                'Төрөл': [str(dtype) for dtype in df.dtypes.values],
+                'Null Биш': df.count().values.tolist(),
+                'Өвөрмөц Утга': df.nunique().values.tolist(),
+                'Дутуу %': [f"{100*df[col].isnull().sum()/len(df):.1f}%" for col in df.columns]
+            })
+            st.dataframe(col_info, width='stretch')
+        
+        # Зорилтот багана сонгох
+        st.subheader(f"{ICONS['target']} Өгөгдлийн Багцыг Тохируулах")
+        
+        # Тайлбар текст нэмэх
+        st.markdown("""
+        <div class="info-box">
+            <strong>Зорилтот багана</strong> гэдэг нь таны загвар таамаглахыг хүсэж буй үр дүнгийн багана юм. 
+            Жишээ нь: "price" (үнэ), "label" (шошго), "outcome" (үр дүн) гэх мэт.
+            Ихэвчлэн сүүлийн багана зорилтот багана байдаг.
+        </div>
+        """, unsafe_allow_html=True)
+        
+        target_col = st.selectbox(
+            "Зорилтот Багана Сонгох",
+            df.columns.tolist(),
+            index=len(df.columns) - 1,
+            help="Загвараар таамаглахыг хүсэж буй баганаа сонгоно уу. Энэ нь ихэвчлэн 'target', 'label', 'y' гэх мэт нэртэй байдаг."
+        )
+        
+        # Сонгосон зорилтот баганын мэдээлэл харуулах
+        if target_col:
+            target_info = df[target_col]
+            col1, col2 = st.columns(2)
+            with col1:
+                st.markdown(f"**Сонгосон зорилт:** `{target_col}`")
+                st.markdown(f"**Төрөл:** {target_info.dtype}")
+            with col2:
+                unique_count = target_info.nunique()
+                st.markdown(f"**Өвөрмөц утгууд:** {unique_count}")
+                if unique_count <= 10:
+                    st.markdown(f"**Утгууд:** {list(target_info.unique()[:10])}")
+        
+        protected_attrs = st.multiselect(
+            "Хамгаалагдсан Атрибутууд (заавал биш)",
+            [c for c in df.columns if c != target_col],
+            help="Шударга байдлын шинжилгээнд ашиглах баганууд. Жишээ нь: 'gender', 'age', 'race' гэх мэт хүн ам зүйн баганууд."
+        )
+        
+        # Боловсруулах товч
+        if st.button(f"{ICONS['play']} Өгөгдөл Боловсруулах", type="primary", width='stretch'):
+            with st.spinner("Өгөгдөл боловсруулж байна..."):
+                try:
+                    framework.load_data(
+                        df, target=target_col,
+                        protected_attributes=protected_attrs
+                    )
+                    st.session_state['target_col'] = target_col
+                    st.session_state['data_loaded'] = True
+                    
+                    # Шинэ өгөгдөл ачаалсан тул хуучин загвар болон тайлбаруудыг цэвэрлэх
+                    # Энэ нь feature тооны зөрүүтэй алдаанаас сэргийлнэ
+                    st.session_state['model_trained'] = False
+                    st.session_state['explanations_generated'] = False
+                    if 'explanations' in st.session_state:
+                        del st.session_state['explanations']
+                    
+                    # Амжилттай мэдээллийг session state-д хадгалах (rerun-ий дараа харуулахын тулд)
+                    st.session_state['data_success_message'] = {
+                        'train_samples': len(framework.X_train),
+                        'test_samples': len(framework.X_test),
+                        'features': len(framework.feature_names)
+                    }
+                    
+                    # Toast мэдэгдэл харуулах (rerun-д хадгалагдана)
+                    st.toast(f"{ICONS['check']} Өгөгдөл амжилттай боловсруулагдлаа!", icon="✅")
+                    
+                    # Session state шинэчлэгдсэн тул UI шинэчлэх
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"{ICONS['warning']} Өгөгдөл боловсруулахад алдаа: {e}")
+        
+        # Амжилттай мэдээллийг харуулах (rerun-ий дараа)
+        if 'data_success_message' in st.session_state:
+            msg = st.session_state['data_success_message']
+            st.success(f"{ICONS['check']} Өгөгдөл амжилттай боловсруулагдлаа!")
+            st.markdown(f"""
+            <div class="success-box">
+                <strong>Боловсруулалт Дууссан:</strong><br/>
+                {ICONS['bullet']} Сургалтын дээжүүд: {msg['train_samples']:,}<br/>
+                {ICONS['bullet']} Тест дээжүүд: {msg['test_samples']:,}<br/>
+                {ICONS['bullet']} Шинж чанарууд: {msg['features']}
+            </div>
+            """, unsafe_allow_html=True)
+            # Мэдээллийг нэг удаа харуулсны дараа устгах
+            del st.session_state['data_success_message']
+
+
+def render_model_section():
+    """Загвар сургах хэсгийг харуулах."""
+    import streamlit as st
+    
+    st.markdown(f"""
+    <div class="section-header">{ICONS['model']} Загвар Сургах</div>
+    """, unsafe_allow_html=True)
+    
+    framework = st.session_state.get('framework')
+    
+    # Session state болон framework хоёуланг нь шалгах
+    # Framework дээр өгөгдөл ачаалагдсан бол session state-г синхрончлох
+    data_loaded = st.session_state.get('data_loaded', False)
+    if framework is not None and framework.X_train is not None:
+        if not data_loaded:
+            st.session_state['data_loaded'] = True
+            data_loaded = True
+    
+    if not data_loaded:
+        st.markdown(f"""
+        <div class="warning-box">
+            {ICONS['warning']} <strong>Өгөгдөл шаардлагатай</strong><br/>
+            Эхлээд "Өгөгдөл" хэсэгт очиж өгөгдөл ачаалж боловсруулна уу.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # Загвар сонгох
+    st.subheader("Загварын Тохиргоо")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        model_type = st.selectbox(
+            "Загварын Төрөл",
+            [
+                "xgboost", "lightgbm", "catboost",  # Gradient Boosting
+                "random_forest", "extra_trees", "gradient_boosting", "adaboost",  # Tree Ensemble
+                "neural_network",  # Neural Network
+                "logistic_regression", "svm"  # Linear & Kernel
+            ],
+            help="Сургах загварын төрлийг сонгоно уу. XGBoost, LightGBM, CatBoost нь ихэвчлэн хамгийн сайн үр дүн өгдөг."
+        )
+    
+    with col2:
+        st.markdown("**Загварын Тайлбар:**")
+        descriptions = {
+            "xgboost": f"{ICONS['bullet']} XGBoost - Хурдан, нарийвчлалтай Gradient Boosting",
+            "lightgbm": f"{ICONS['bullet']} LightGBM - Маш хурдан, том өгөгдөлд тохиромжтой",
+            "catboost": f"{ICONS['bullet']} CatBoost - Categorical өгөгдөлд сайн, overfitting багатай",
+            "random_forest": f"{ICONS['bullet']} Random Forest - Тогтвортой, тайлбарлахад хялбар",
+            "extra_trees": f"{ICONS['bullet']} Extra Trees - Random Forest-аас хурдан, санамсаргүй",
+            "gradient_boosting": f"{ICONS['bullet']} Gradient Boosting - Сонгодог sklearn boosting",
+            "adaboost": f"{ICONS['bullet']} AdaBoost - Adaptive Boosting, энгийн бөгөөд үр дүнтэй",
+            "neural_network": f"{ICONS['bullet']} Neural Network (MLP) - Нарийн хэв маягийг сурах",
+            "logistic_regression": f"{ICONS['bullet']} Logistic Regression - Шугаман, тайлбарлах боломжтой",
+            "svm": f"{ICONS['bullet']} SVM - Support Vector Machine, kernel арга"
+        }
+        st.markdown(f"""
+        <div class="info-box">
+            {descriptions.get(model_type, "")}
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Hyperparameter-ууд
+    st.subheader("Hyperparameter-ууд")
+    
+    params = {}
+    
+    if model_type == "xgboost":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_estimators = st.slider("n_estimators", 50, 500, 100, 
+                                     help="Модны тоо. Их байх тусам сайн боловч удаан.")
+        with col2:
+            max_depth = st.slider("max_depth", 2, 15, 6,
+                                  help="Модны гүн. Их байх тусам нарийн загвар.")
+        with col3:
+            learning_rate = st.slider("learning_rate", 0.01, 0.3, 0.1,
+                                      help="Сургалтын хурд. Бага байх тусам тогтвортой.")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth, 'learning_rate': learning_rate}
+    
+    elif model_type == "lightgbm":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_estimators = st.slider("n_estimators", 50, 500, 100, 
+                                     help="Boosting давталтын тоо")
+        with col2:
+            max_depth = st.slider("max_depth", 2, 15, 6,
+                                  help="Модны хамгийн их гүн")
+        with col3:
+            learning_rate = st.slider("learning_rate", 0.01, 0.3, 0.1,
+                                      help="Сургалтын хурд")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth, 'learning_rate': learning_rate}
+    
+    elif model_type == "catboost":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_estimators = st.slider("iterations", 50, 500, 100, 
+                                     help="Boosting давталтын тоо")
+        with col2:
+            max_depth = st.slider("depth", 2, 10, 6,
+                                  help="Модны гүн (CatBoost-д 10 хүртэл)")
+        with col3:
+            learning_rate = st.slider("learning_rate", 0.01, 0.3, 0.1,
+                                      help="Сургалтын хурд")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth, 'learning_rate': learning_rate}
+    
+    elif model_type == "random_forest":
+        col1, col2 = st.columns(2)
+        with col1:
+            n_estimators = st.slider("n_estimators", 50, 500, 100,
+                                     help="Модны тоо")
+        with col2:
+            max_depth = st.slider("max_depth", 2, 20, 10,
+                                  help="Модны хамгийн их гүн")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth}
+    
+    elif model_type == "extra_trees":
+        col1, col2 = st.columns(2)
+        with col1:
+            n_estimators = st.slider("n_estimators", 50, 500, 100,
+                                     help="Модны тоо")
+        with col2:
+            max_depth = st.slider("max_depth", 2, 30, 15,
+                                  help="Модны хамгийн их гүн (None=хязгааргүй)")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth if max_depth < 30 else None}
+    
+    elif model_type == "gradient_boosting":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_estimators = st.slider("n_estimators", 50, 300, 100, 
+                                     help="Boosting давталтын тоо")
+        with col2:
+            max_depth = st.slider("max_depth", 1, 10, 3,
+                                  help="Модны гүн (3-5 ихэвчлэн сайн)")
+        with col3:
+            learning_rate = st.slider("learning_rate", 0.01, 0.3, 0.1,
+                                      help="Сургалтын хурд")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth, 'learning_rate': learning_rate}
+    
+    elif model_type == "adaboost":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            n_estimators = st.slider("n_estimators", 10, 200, 50, 
+                                     help="Сул суралцагчдын тоо")
+        with col2:
+            max_depth = st.slider("base_max_depth", 1, 5, 3,
+                                  help="Суурь модны гүн")
+        with col3:
+            learning_rate = st.slider("learning_rate", 0.1, 2.0, 1.0,
+                                      help="Сургалтын хурд")
+        params = {'n_estimators': n_estimators, 'max_depth': max_depth, 'learning_rate': learning_rate}
+    
+    elif model_type == "neural_network":
+        col1, col2 = st.columns(2)
+        with col1:
+            hidden_layers = st.text_input("hidden_layers", "128,64,32",
+                                          help="Нуугдмал давхаргуудын хэмжээ, таслалаар тусгаарлана")
+        with col2:
+            epochs = st.slider("epochs", 50, 300, 100,
+                               help="Сургалтын давталтын тоо")
+        params = {'hidden_layers': [int(x.strip()) for x in hidden_layers.split(',')], 'epochs': epochs}
+    
+    elif model_type == "logistic_regression":
+        col1, col2 = st.columns(2)
+        with col1:
+            penalty = st.selectbox("penalty", ["l2", "l1", "elasticnet"],
+                                   help="Regularization төрөл")
+        with col2:
+            C = st.slider("C", 0.01, 10.0, 1.0,
+                          help="Урвуу regularization хүч (их=бага regularization)")
+        params = {'penalty': penalty, 'C': C}
+    
+    elif model_type == "svm":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            kernel = st.selectbox("kernel", ["rbf", "linear", "poly", "sigmoid"],
+                                  help="Kernel функц")
+        with col2:
+            C = st.slider("C", 0.1, 10.0, 1.0,
+                          help="Regularization параметр")
+        with col3:
+            gamma = st.selectbox("gamma", ["scale", "auto"],
+                                 help="Kernel коэффициент")
+        params = {'kernel': kernel, 'C': C, 'gamma': gamma}
+    
+    else:
+        st.info(f"{ICONS['info']} Үндсэн тохиргоо ашиглагдана")
+        params = {}
+    
+    # Сургах товч
+    st.markdown("")  # Spacer
+    
+    if st.button(f"{ICONS['play']} Загвар Сургах", type="primary", width='stretch'):
+        with st.spinner(f"{model_type} загвар сургаж байна... Түр хүлээнэ үү."):
+            try:
+                framework.train_model(model_type=model_type, **params)
+                st.session_state['model_trained'] = True
+                
+                # Амжилттай мэдээллийг session state-д хадгалах
+                st.session_state['model_success_message'] = {
+                    'model_type': model_type,
+                    'model_name': type(framework.model).__name__
+                }
+                
+                # Toast мэдэгдэл
+                st.toast(f"{ICONS['check']} Загвар амжилттай сургагдлаа!", icon="✅")
+                
+                # UI шинэчлэх
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"{ICONS['warning']} Загвар сургахад алдаа: {e}")
+                logger.error(f"Model training error: {e}")
+    
+    # Амжилттай мэдээллийг харуулах (rerun-ий дараа)
+    if 'model_success_message' in st.session_state:
+        msg = st.session_state['model_success_message']
+        st.success(f"{ICONS['check']} {msg['model_name']} загвар амжилттай сургагдлаа!")
+        del st.session_state['model_success_message']
+    
+    # Загварын үнэлгээ (хэрэв сургагдсан бол)
+    model_trained = st.session_state.get('model_trained', False)
+    
+    if model_trained and framework.model is not None:
+        st.subheader("Загварын Гүйцэтгэл")
+        
+        y_pred = framework.model.predict(framework.X_test)
+        
+        # Даалгаврын төрлийг тодорхойлох
+        is_classification = False
+        try:
+            unique_values = np.unique(framework.y_test)
+            if len(unique_values) <= 20:
+                if np.all(unique_values == unique_values.astype(int)):
+                    is_classification = True
+        except:
+            pass
+        
+        col1, col2, col3 = st.columns(3)
+        
+        if is_classification:
+            from sklearn.metrics import accuracy_score, f1_score
+            accuracy = accuracy_score(framework.y_test, y_pred.round())
+            with col1:
+                st.metric("Accuracy", f"{accuracy:.2%}")
+        else:
+            from sklearn.metrics import r2_score, mean_squared_error
+            r2 = r2_score(framework.y_test, y_pred)
+            with col1:
+                st.metric("R² Score", f"{r2:.4f}")
+        
+        with col2:
+            st.metric("Загварын Төрөл", type(framework.model).__name__)
+        with col3:
+            st.metric("Шинж Чанарууд", len(framework.feature_names))
+
+
+def render_explanation_section():
+    """SHAP тайлбарын хэсгийг харуулах."""
+    import streamlit as st
+    
+    st.markdown(f"""
+    <div class="section-header">{ICONS['explain']} SHAP Тайлбарууд</div>
+    """, unsafe_allow_html=True)
+    
+    framework = st.session_state.get('framework')
+    
+    # Framework state-аас session state-г синхрончлох
+    model_trained = st.session_state.get('model_trained', False)
+    if framework is not None and framework.model is not None:
+        if not model_trained:
+            st.session_state['model_trained'] = True
+            model_trained = True
+    
+    # SHAP state-г синхрончлох
+    explanations_generated = st.session_state.get('explanations_generated', False)
+    explanations = st.session_state.get('explanations', {})
+    
+    if framework is not None and framework.shap_values is not None:
+        if not explanations_generated:
+            st.session_state['explanations_generated'] = True
+    # Framework-т shap_values байхгүй бол session_state-аас сэргээх
+    elif framework is not None and framework.shap_values is None and 'shap_values' in explanations:
+        framework.shap_values = explanations['shap_values']
+        framework._explanations = explanations
+        if not explanations_generated:
+            st.session_state['explanations_generated'] = True
+    
+    if not model_trained:
+        st.markdown(f"""
+        <div class="warning-box">
+            {ICONS['warning']} <strong>Загвар шаардлагатай</strong><br/>
+            Эхлээд "Загвар" хэсэгт очиж загвар сургаарай.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # SHAP тайлбар
+    st.markdown("""
+    <div class="info-box">
+        <strong>SHAP (SHapley Additive exPlanations)</strong> нь загварын таамаглалыг тайлбарлах арга юм.
+        Шинж чанар бүр таамагласан утганд хэрхэн нөлөөлж байгааг харуулна.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Тохиргоо
+    st.subheader("Тохиргоо")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        explanation_type = st.selectbox(
+            "Тайлбарын Төрөл",
+            ["both", "global", "local"],
+            help="Global: Бүх өгөгдлийн ерөнхий тайлбар | Local: Тусдаа дээж бүрийн тайлбар | Both: Хоёулаа"
+        )
+    
+    with col2:
+        max_features = st.slider("Харуулах Шинж Чанар", 5, 30, 20,
+                                 help="Хамгийн их харуулах шинж чанарын тоо")
+    
+    # Тайлбарууд үүсгэх
+    if st.button(f"{ICONS['play']} Тайлбарууд Үүсгэх", type="primary", width='stretch'):
+        with st.spinner("SHAP утгуудыг тооцоолж байна... Энэ хэдэн минут үргэлжлэх болно."):
+            try:
+                explanations = framework.explain(explanation_type=explanation_type)
+                st.session_state['explanations'] = explanations
+                st.session_state['explanations_generated'] = True
+                
+                # Амжилттай мэдээллийг session state-д хадгалах
+                st.session_state['shap_success_message'] = True
+                
+                # Toast мэдэгдэл
+                st.toast(f"{ICONS['check']} SHAP тайлбарууд үүсгэгдлээ!", icon="✅")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"{ICONS['warning']} Тайлбар үүсгэхэд алдаа: {e}")
+                logger.error(f"Explanation error: {e}")
+    
+    # Амжилттай мэдээллийг харуулах (rerun-ий дараа)
+    if 'shap_success_message' in st.session_state:
+        st.success(f"{ICONS['check']} SHAP тайлбарууд амжилттай үүсгэгдлээ!")
+        del st.session_state['shap_success_message']
+    
+    # Тайлбарууд харуулах
+    explanations_generated = st.session_state.get('explanations_generated', False)
+    explanations = st.session_state.get('explanations', {})
+    
+    # framework.shap_values эсвэл session_state дахь explanations-аас шалгах
+    has_shap_values = (framework.shap_values is not None) or ('shap_values' in explanations)
+    
+    if explanations_generated and has_shap_values:
+        # Глобал тайлбарууд
+        if 'global' in explanations:
+            st.subheader(f"{ICONS['chart']} Глобал Шинж Чанарын Ач Холбогдол")
+            importance_data = explanations['global']['feature_importance']
+            df_importance = pd.DataFrame(importance_data)
+            
+            st.dataframe(
+                df_importance.head(max_features),
+                width='stretch'
+            )
+        
+        # Локал тайлбарууд
+        if 'local' in explanations:
+            st.subheader(f"{ICONS['target']} Локал Тайлбарууд")
+            
+            sample_idx = st.slider(
+                "Дээж Сонгох",
+                0, len(framework.X_test) - 1, 0,
+                help="Тайлбар харах дээжийн дугаарыг сонгоно уу"
+            )
+            
+            local_exp = explanations['local']['explanations']
+            if sample_idx < len(local_exp):
+                exp = local_exp[sample_idx]
+                
+                st.markdown(f"**Дээж #{exp['sample_index']}**")
+                st.markdown(f"Суурь Утга: `{exp['base_value']:.4f}`")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown(f"**{ICONS['up']} Эерэг Нөлөөтэй Шинж Чанарууд:**")
+                    for item in exp['top_positive'][:5]:
+                        shap_val = item.get('shap_value', item.get('contribution', 0))
+                        st.markdown(f"<span class='feature-positive'>{ICONS['bullet']} {item['feature']}: +{shap_val:.4f}</span>", 
+                                    unsafe_allow_html=True)
+                
+                with col2:
+                    st.markdown(f"**{ICONS['down']} Сөрөг Нөлөөтэй Шинж Чанарууд:**")
+                    for item in exp['top_negative'][:5]:
+                        shap_val = item.get('shap_value', item.get('contribution', 0))
+                        st.markdown(f"<span class='feature-negative'>{ICONS['bullet']} {item['feature']}: {shap_val:.4f}</span>",
+                                    unsafe_allow_html=True)
+        
+        # Харгалзах тайлбар байхгүй бол
+        if 'global' not in explanations and 'local' not in explanations:
+            st.info(f"{ICONS['info']} Тайлбар үүсгэгдсэн боловч 'global' эсвэл 'local' өгөгдөл олдсонгүй.")
+    elif explanations_generated and not has_shap_values:
+        st.warning(f"{ICONS['warning']} Тайлбарууд үүсгэгдсэн боловч SHAP утгууд олдсонгүй. Дахин үүсгэнэ үү.")
+
+
+def render_visualization_section():
+    """Визуализацийн хэсгийг харуулах."""
+    import streamlit as st
+    
+    st.markdown(f"""
+    <div class="section-header">{ICONS['chart']} Визуализациуд</div>
+    """, unsafe_allow_html=True)
+    
+    framework = st.session_state.get('framework')
+    
+    # Framework state-аас session state-г синхрончлох
+    explanations_generated = st.session_state.get('explanations_generated', False)
+    explanations = st.session_state.get('explanations', {})
+    
+    if framework is not None and framework.shap_values is not None:
+        if not explanations_generated:
+            st.session_state['explanations_generated'] = True
+            explanations_generated = True
+    # Framework-т shap_values байхгүй бол session_state-аас сэргээх
+    elif framework is not None and framework.shap_values is None and 'shap_values' in explanations:
+        framework.shap_values = explanations['shap_values']
+        framework._explanations = explanations
+        if not explanations_generated:
+            st.session_state['explanations_generated'] = True
+            explanations_generated = True
+    
+    # framework.shap_values эсвэл session_state дахь explanations-аас шалгах
+    has_shap_values = (framework is not None and framework.shap_values is not None) or ('shap_values' in explanations)
+    
+    if not explanations_generated or not has_shap_values:
+        st.markdown(f"""
+        <div class="warning-box">
+            {ICONS['warning']} <strong>SHAP тайлбар шаардлагатай</strong><br/>
+            Эхлээд "Тайлбарууд" хэсэгт очиж SHAP тайлбар үүсгэнэ үү.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    # График төрөл сонгох
+    col1, col2 = st.columns([1, 2])
+    
+    with col1:
+        plot_type = st.selectbox(
+            "Визуализаци Сонгох",
+            ["summary", "bar", "waterfall", "heatmap", "violin", "dependence"],
+            help="Үүсгэх графикийн төрлийг сонгоно уу"
+        )
+    
+    with col2:
+        plot_descriptions = {
+            "summary": f"{ICONS['bullet']} Beeswarm график - Шинж чанар бүрийн SHAP утгын хуваарилалт",
+            "bar": f"{ICONS['bullet']} Bar диаграм - Дундаж SHAP утгаар эрэмблэсэн ач холбогдол",
+            "waterfall": f"{ICONS['bullet']} Waterfall график - Нэг таамаглалын нарийвчилсан задаргаа",
+            "heatmap": f"{ICONS['bullet']} Heatmap - Дээжүүд болон шинж чанаруудын SHAP утга",
+            "violin": f"{ICONS['bullet']} Violin график - SHAP утгын хуваарилалтын хэлбэр",
+            "dependence": f"{ICONS['bullet']} Dependence график - Шинж чанарын утга vs SHAP утга"
+        }
+        st.markdown(f"""
+        <div class="info-box">
+            {plot_descriptions.get(plot_type, "")}
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Нэмэлт сонголтууд
+    with st.expander(f"{ICONS['settings']} Нарийвчилсан Сонголтууд", expanded=False):
+        max_display = st.slider("Шинж Чанарын Тоо", 5, 30, 15,
+                                help="Графикт харуулах шинж чанарын хамгийн их тоо")
+        
+        sample_idx = 0
+        feature = None
+        
+        if plot_type == "waterfall":
+            sample_idx = st.slider(
+                "Дээжийн Индекс",
+                0, len(framework.X_test) - 1, 0,
+                help="Waterfall график үүсгэх дээжийг сонгоно уу"
+            )
+        
+        if plot_type == "dependence":
+            feature = st.selectbox(
+                "Шинж Чанар",
+                framework.feature_names,
+                help="Dependence график үүсгэх шинж чанарыг сонгоно уу"
+            )
+    
+    # График үүсгэх
+    if st.button(f"{ICONS['play']} График Үүсгэх", type="primary", width='stretch'):
+        with st.spinner("Визуализаци үүсгэж байна..."):
+            try:
+                kwargs = {'max_display': max_display}
+                
+                if plot_type == "waterfall":
+                    kwargs['sample_idx'] = sample_idx
+                    # shap_values-г framework эсвэл session_state-аас авах
+                    shap_vals = framework.shap_values if framework.shap_values is not None else explanations.get('shap_values')
+                    if shap_vals is not None:
+                        kwargs['base_value'] = float(np.mean(shap_vals.sum(axis=1)))
+                
+                if plot_type == "dependence" and feature:
+                    kwargs['feature'] = feature
+                
+                fig = framework.visualize(plot_type=plot_type, **kwargs)
+                st.plotly_chart(fig, width='stretch')
+                
+            except Exception as e:
+                st.error(f"{ICONS['warning']} Визуализаци үүсгэхэд алдаа: {e}")
+                logger.error(f"Visualization error: {e}")
+
+
+def render_fairness_section():
+    """Шударга байдлын шинжилгээний хэсгийг харуулах."""
+    import streamlit as st
+    
+    st.markdown(f"""
+    <div class="section-header">{ICONS['fairness']} Шударга Байдлын Шинжилгээ</div>
+    """, unsafe_allow_html=True)
+    
+    framework = st.session_state.get('framework')
+    
+    # Framework state-аас session state-г синхрончлох
+    model_trained = st.session_state.get('model_trained', False)
+    if framework is not None and framework.model is not None:
+        if not model_trained:
+            st.session_state['model_trained'] = True
+            model_trained = True
+    
+    if not model_trained:
+        st.markdown(f"""
+        <div class="warning-box">
+            {ICONS['warning']} <strong>Загвар шаардлагатай</strong><br/>
+            Эхлээд загвар сургаарай.
+        </div>
+        """, unsafe_allow_html=True)
+        return
+    
+    st.markdown("""
+    <div class="info-box">
+        <strong>Шударга байдлын шинжилгээ</strong> нь таны AI загвар өөр өөр бүлгүүдэд тэгш хандаж байгааг баталгаажуулна.
+        Энэ нь <strong>Хариуцлагатай AI</strong>-ийн чухал бүрэлдэхүүн хэсэг юм.
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Хамгаалагдсан атрибутууд
+    st.subheader("Тохиргоо")
+    
+    if hasattr(framework, '_protected_attributes') and framework._protected_attributes:
+        st.markdown(f"""
+        <div class="success-box">
+            <strong>Хамгаалагдсан атрибутууд:</strong> {', '.join(framework._protected_attributes)}
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.markdown(f"""
+        <div class="warning-box">
+            {ICONS['warning']} Хамгаалагдсан атрибут тохируулаагүй байна. 
+            Өгөгдөл ачаалах үед хамгаалагдсан атрибутуудыг сонгоно уу.
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Шударга байдлын хэмжигдэхүүнүүдийн тайлбар
+    st.subheader("Шударга Байдлын Хэмжигдэхүүнүүд")
+    
+    with st.expander(f"{ICONS['info']} Хэмжигдэхүүнүүдийн тайлбар", expanded=False):
+        st.markdown(f"""
+        **Demographic Parity (Хүн ам зүйн Тэнцвэрт байдал)**
+        
+        {ICONS['bullet']} Бүлгүүдийн хооронд эерэг таамаглалын тэнцүү хувь хэмжээ
+        
+        **Equalized Odds (Тэнцүүлсэн Магадлал)**
+        
+        {ICONS['bullet']} Бүлгүүдийн хооронд үнэн эерэг, худал эерэг хувь тэнцүү байх
+        
+        **Calibration (Тохируулга)**
+        
+        {ICONS['bullet']} Таамагласан магадлалууд бодит үр дүнг тусгах
+        """)
+    
+    # Шударга байдлын үнэлгээг ажиллуулах
+    if st.button(f"{ICONS['play']} Шинжилгээ Эхлүүлэх", type="primary", width='stretch'):
+        with st.spinner("Шударга байдлыг шинжилж байна..."):
+            try:
+                results = framework.evaluate(include_fairness=True)
+                
+                if 'fairness' in results:
+                    st.success(f"{ICONS['check']} Шударга байдлын шинжилгээ дууслаа!")
+                    
+                    fairness_results = results['fairness']
+                    st.json(fairness_results)
+                else:
+                    st.info(f"{ICONS['info']} Шударга байдлын хэмжигдэхүүн байхгүй. Хамгаалагдсан атрибутууд тохируулагдсан эсэхийг шалгана уу.")
+                    
+            except Exception as e:
+                st.error(f"{ICONS['warning']} Шударга байдлын шинжилгээнд алдаа: {e}")
+                logger.error(f"Fairness analysis error: {e}")
+
+
+# ============================================================================
+# Helper Component Classes
+# ============================================================================
+
+class SidebarComponent:
+    """Хажуугийн самбарын бүрэлдэхүүн класс."""
+    
+    @staticmethod
+    def render():
+        render_sidebar()
+
+
+class MetricsComponent:
+    """Хэмжигдэхүүн харуулах бүрэлдэхүүн."""
+    
+    @staticmethod
+    def render(metrics: Dict[str, float]):
+        import streamlit as st
+        
+        cols = st.columns(len(metrics))
+        for col, (name, value) in zip(cols, metrics.items()):
+            with col:
+                st.metric(name, f"{value:.4f}")
+
+
+class ExplanationComponent:
+    """Тайлбар харуулах бүрэлдэхүүн."""
+    
+    @staticmethod
+    def render(explanation: Dict[str, Any]):
+        import streamlit as st
+        
+        st.markdown(f"**Суурь Утга:** {explanation.get('base_value', 'N/A')}")
+        
+        contributions = explanation.get('contributions', [])
+        for item in contributions[:10]:
+            direction = ICONS['up'] if item['shap_value'] > 0 else ICONS['down']
+            color_class = 'feature-positive' if item['shap_value'] > 0 else 'feature-negative'
+            st.markdown(
+                f"<span class='{color_class}'>{direction} <strong>{item['feature']}</strong>: {item['shap_value']:.4f}</span>",
+                unsafe_allow_html=True
+            )

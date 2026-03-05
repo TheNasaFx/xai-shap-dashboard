@@ -1,0 +1,122 @@
+# Framework Configuration
+# XAI-SHAP Visual Analytics Framework
+
+# Application Settings
+app:
+  name: "XAI-SHAP Visual Analytics"
+  version: "1.0.0"
+  debug: true
+  log_level: "INFO"
+
+# Data Processing Settings
+data_processing:
+  # Normalization methods: standard, minmax, robust
+  normalization_method: "standard"
+  # Handle missing values: drop, mean, median, mode
+  missing_value_strategy: "median"
+  # Categorical encoding: onehot, label, target
+  categorical_encoding: "onehot"
+  # Train-test split ratio
+  test_size: 0.2
+  random_state: 42
+
+# Model Settings
+models:
+  # Default model type: xgboost, random_forest, neural_network, lightgbm
+  default_model: "xgboost"
+
+  xgboost:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    objective: "binary:logistic"
+
+  random_forest:
+    n_estimators: 100
+    max_depth: 10
+    min_samples_split: 2
+    min_samples_leaf: 1
+
+  neural_network:
+    hidden_layers: [128, 64, 32]
+    activation: "relu"
+    dropout_rate: 0.3
+    learning_rate: 0.001
+    epochs: 100
+    batch_size: 32
+
+  lightgbm:
+    n_estimators: 100
+    max_depth: 6
+    learning_rate: 0.1
+    num_leaves: 31
+
+# SHAP Explainer Settings
+shap:
+  # Background samples for SHAP
+  background_samples: 100
+  # Maximum display features
+  max_display_features: 20
+  # Explanation types: global, local, both
+  explanation_type: "both"
+  # SHAP explainer type: tree, kernel, deep, linear
+  explainer_type: "auto"
+
+# Visualization Settings
+visualization:
+  # Theme: plotly, seaborn, matplotlib
+  default_theme: "plotly"
+  # Color palette
+  color_palette: "viridis"
+  # Figure size
+  figure_width: 10
+  figure_height: 6
+  # Interactive plots
+  interactive: true
+  # Export format: png, svg, pdf, html
+  export_format: "html"
+
+# Dashboard Settings
+dashboard:
+  host: "localhost"
+  port: 8501
+  theme: "light"
+  sidebar_state: "expanded"
+  page_title: "XAI-SHAP Visual Analytics"
+  page_icon: "🔍"
+
+# Evaluation Settings
+evaluation:
+  # Metrics for classification
+  classification_metrics:
+    - accuracy
+    - precision
+    - recall
+    - f1_score
+    - roc_auc
+  # Metrics for regression
+  regression_metrics:
+    - mse
+    - rmse
+    - mae
+    - r2_score
+  # Fairness metrics
+  fairness_metrics:
+    - demographic_parity
+    - equalized_odds
+    - calibration
+
+# Responsible AI Settings
+responsible_ai:
+  # Enable bias detection
+  bias_detection: true
+  # Protected attributes for fairness analysis
+  protected_attributes: []
+  # Transparency requirements
+  transparency:
+    log_decisions: true
+    export_explanations: true
+  # Auditability
+  audit:
+    save_model_versions: true
+    track_predictions: true
