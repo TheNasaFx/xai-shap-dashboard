@@ -24,7 +24,7 @@ seaborn>=0.11.0
 plotly>=5.5.0
 
 # Dashboard
-streamlit>=1.15.0
+streamlit>=1.32.0
 
 # Utilities
 pyyaml>=6.0
