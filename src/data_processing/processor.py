@@ -143,6 +143,9 @@ class DataProcessor:
             stratify=y if self._is_classification(y) else None
         )
         
+        # Save test indices for protected data alignment
+        self._test_indices = X_test.index.tolist() if isinstance(X_test, pd.DataFrame) else None
+        
         # Convert to numpy arrays
         X_train = X_train.values if isinstance(X_train, pd.DataFrame) else X_train
         X_test = X_test.values if isinstance(X_test, pd.DataFrame) else X_test

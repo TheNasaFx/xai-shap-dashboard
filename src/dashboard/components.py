@@ -309,14 +309,11 @@ def render_data_section():
         use_sample = st.button(f"{ICONS['play']} Жишээ Өгөгдөл Ачаалах", width='stretch')
     
     if use_sample:
-        # Жишээ өгөгдлийн багц үүсгэх
-        from sklearn.datasets import make_classification
-        X, y = make_classification(
-            n_samples=1000, n_features=10, n_informative=5,
-            n_redundant=2, random_state=42
-        )
-        df = pd.DataFrame(X, columns=[f'feature_{i}' for i in range(10)])
-        df['target'] = y
+        # Breast Cancer жишээ өгөгдлийн багц ачаалах
+        from sklearn.datasets import load_breast_cancer
+        data = load_breast_cancer()
+        df = pd.DataFrame(data.data, columns=data.feature_names)
+        df['diagnosis'] = data.target  # 0=malignant, 1=benign
         st.session_state['uploaded_data'] = df
         
         # Шинэ өгөгдөл ачаалсан тул хуучин state-үүдийг цэвэрлэх
@@ -324,7 +321,7 @@ def render_data_section():
         st.session_state['model_trained'] = False
         st.session_state['explanations_generated'] = False
         
-        st.success(f"{ICONS['check']} Жишээ өгөгдлийн багц ачаалагдлаа!")
+        st.success(f"{ICONS['check']} Breast Cancer жишээ өгөгдлийн багц ачаалагдлаа! (569 дээж, 30 шинж чанар)")
         st.rerun()  # UI шинэчлэх
     
     if uploaded_file is not None:
@@ -966,7 +963,67 @@ def render_visualization_section():
                     kwargs['feature'] = feature
                 
                 fig = framework.visualize(plot_type=plot_type, **kwargs)
-                st.plotly_chart(fig, width='stretch')
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # Графикийн тайлбар
+                plot_explanations = {
+                    "summary": f"""
+                    <div class="info-box">
+                        <strong>{ICONS['info']} Summary Plot (Beeswarm) Тайлбар:</strong><br/>
+                        {ICONS['bullet']} Цэг бүр нэг дээж дэх нэг шинж чанарын SHAP утгыг илэрхийлнэ.<br/>
+                        {ICONS['bullet']} <strong>Хэвтээ тэнхлэг (X):</strong> SHAP утга — эерэг утга таамаглалыг нэмэгдүүлж, сөрөг утга бууруулна.<br/>
+                        {ICONS['bullet']} <strong>Босоо тэнхлэг (Y):</strong> Шинж чанарууд ач холбогдлоор эрэмблэгдсэн.<br/>
+                        {ICONS['bullet']} <strong>Өнгө:</strong> Улаан = шинж чанарын утга өндөр, Цэнхэр = шинж чанарын утга бага.<br/>
+                        {ICONS['bullet']} Өргөн тархалттай шинж чанарууд загварт илүү их нөлөөтэй.
+                    </div>
+                    """,
+                    "bar": f"""
+                    <div class="info-box">
+                        <strong>{ICONS['info']} Bar Plot Тайлбар:</strong><br/>
+                        {ICONS['bullet']} Шинж чанар бүрийн <strong>дундаж абсолют SHAP утга</strong>-ыг харуулна.<br/>
+                        {ICONS['bullet']} Дээд шинж чанарууд загварын таамаглалд хамгийн их нөлөөлдөг.<br/>
+                        {ICONS['bullet']} Энэ нь <strong>глобал шинж чанарын ач холбогдол</strong>-ыг илэрхийлнэ — бүх дээжүүдийн дундажаар.
+                    </div>
+                    """,
+                    "waterfall": f"""
+                    <div class="info-box">
+                        <strong>{ICONS['info']} Waterfall Plot Тайлбар:</strong><br/>
+                        {ICONS['bullet']} <strong>Нэг тодорхой дээж</strong>ийн таамаглалыг задлан харуулна.<br/>
+                        {ICONS['bullet']} Доод талд суурь утга (E[f(x)]) — загварын дундаж гаралт.<br/>
+                        {ICONS['bullet']} Улаан баганууд таамаглалыг <strong>нэмэгдүүлж</strong>, цэнхэр баганууд <strong>бууруулж</strong> байна.<br/>
+                        {ICONS['bullet']} Дээд талд эцсийн таамаглалын утга f(x) харагдана.
+                    </div>
+                    """,
+                    "heatmap": f"""
+                    <div class="info-box">
+                        <strong>{ICONS['info']} Heatmap Тайлбар:</strong><br/>
+                        {ICONS['bullet']} Бүх дээжүүдийн шинж чанаруудын SHAP утгыг <strong>матриц</strong> хэлбэрээр харуулна.<br/>
+                        {ICONS['bullet']} <strong>Мөр бүр:</strong> нэг дээж, <strong>Багана бүр:</strong> нэг шинж чанар.<br/>
+                        {ICONS['bullet']} Өнгөний эрчим SHAP утгын хэмжээг илэрхийлнэ.<br/>
+                        {ICONS['bullet']} Хэв маяг, бүлэглэл олоход тустай.
+                    </div>
+                    """,
+                    "violin": f"""
+                    <div class="info-box">
+                        <strong>{ICONS['info']} Violin Plot Тайлбар:</strong><br/>
+                        {ICONS['bullet']} Шинж чанар бүрийн SHAP утгын <strong>хуваарилалтын хэлбэр</strong>ийг харуулна.<br/>
+                        {ICONS['bullet']} Өргөн хэсэг нь тухайн SHAP утгын давтамж ихтэйг илэрхийлнэ.<br/>
+                        {ICONS['bullet']} Summary plot-тай төстэй боловч хуваарилалтын нарийвчилсан хэлбэрийг харуулна.
+                    </div>
+                    """,
+                    "dependence": f"""
+                    <div class="info-box">
+                        <strong>{ICONS['info']} Dependence Plot Тайлбар:</strong><br/>
+                        {ICONS['bullet']} Сонгосон шинж чанарын <strong>утга</strong> (X тэнхлэг) болон түүний <strong>SHAP утга</strong> (Y тэнхлэг)-ын хамаарлыг харуулна.<br/>
+                        {ICONS['bullet']} Шинж чанарын утга өсөхөд SHAP утга хэрхэн өөрчлөгдөж байгааг ажиглах боломжтой.<br/>
+                        {ICONS['bullet']} Шугаман бус хамаарлууд, босго утгууд зэргийг олоход тустай.
+                    </div>
+                    """
+                }
+                
+                explanation_html = plot_explanations.get(plot_type, "")
+                if explanation_html:
+                    st.markdown(explanation_html, unsafe_allow_html=True)
                 
             except Exception as e:
                 st.error(f"{ICONS['warning']} Визуализаци үүсгэхэд алдаа: {e}")
@@ -1048,16 +1105,96 @@ def render_fairness_section():
                 results = framework.evaluate(include_fairness=True)
                 
                 if 'fairness' in results:
-                    st.success(f"{ICONS['check']} Шударга байдлын шинжилгээ дууслаа!")
-                    
                     fairness_results = results['fairness']
-                    st.json(fairness_results)
+                    st.session_state['fairness_results'] = fairness_results
+                    st.success(f"{ICONS['check']} Шударга байдлын шинжилгээ дууслаа!")
+                    st.rerun()
                 else:
                     st.info(f"{ICONS['info']} Шударга байдлын хэмжигдэхүүн байхгүй. Хамгаалагдсан атрибутууд тохируулагдсан эсэхийг шалгана уу.")
                     
             except Exception as e:
                 st.error(f"{ICONS['warning']} Шударга байдлын шинжилгээнд алдаа: {e}")
                 logger.error(f"Fairness analysis error: {e}")
+    
+    # Үр дүнг харуулах
+    if 'fairness_results' in st.session_state:
+        fairness_results = st.session_state['fairness_results']
+        
+        # Анхааруулга байвал
+        if 'warning' in fairness_results:
+            st.markdown(f"""
+            <div class="warning-box">
+                {ICONS['warning']} <strong>Анхааруулга:</strong> {fairness_results['warning']}<br/>
+                Өгөгдөл ачаалах хэсэгт буцаж хамгаалагдсан атрибутуудыг сонгоно уу.
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Ерөнхий Эерэг Хувь", f"{fairness_results.get('overall_positive_rate', 0):.2%}")
+        
+        # Бүрэн шинжилгээний үр дүн
+        elif 'metrics_by_attribute' in fairness_results:
+            # Ерөнхий шударга байдлын статус
+            is_fair = fairness_results.get('overall_fairness', False)
+            if is_fair:
+                st.markdown(f"""
+                <div class="success-box">
+                    {ICONS['check']} <strong>Загвар шударга!</strong> Бүх хамгаалагдсан атрибутуудад шударга байдлын босго хангагдсан.
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="warning-box">
+                    {ICONS['warning']} <strong>Шударга бус байдал илэрлээ!</strong> Зарим бүлгүүдэд тэгш бус хандлага байна.
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Атрибут бүрийн дэлгэрэнгүй
+            for attr, metrics in fairness_results['metrics_by_attribute'].items():
+                st.subheader(f"{ICONS['fairness']} {attr}")
+                
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    dp_ratio = metrics.get('demographic_parity_ratio', 0)
+                    st.metric(
+                        "Demographic Parity Харьцаа",
+                        f"{dp_ratio:.3f}",
+                        help="1.0-д ойр байх тусам шударга"
+                    )
+                with col2:
+                    di = metrics.get('disparate_impact', 0)
+                    st.metric(
+                        "Disparate Impact",
+                        f"{di:.3f}",
+                        help="0.8-аас дээш бол 80%-ийн дүрэм хангагдсан"
+                    )
+                with col3:
+                    fair_label = f"{ICONS['check']} Тийм" if metrics.get('is_fair', False) else f"{ICONS['warning']} Үгүй"
+                    st.metric("Шударга Эсэх", fair_label)
+                
+                # Бүлгийн тоон мэдээлэл
+                group_metrics = metrics.get('group_metrics', {})
+                if group_metrics:
+                    with st.expander(f"{ICONS['info']} Бүлгийн Дэлгэрэнгүй ({attr})", expanded=True):
+                        group_data = []
+                        for group_name, gm in group_metrics.items():
+                            group_data.append({
+                                'Бүлэг': str(group_name),
+                                'Хэмжээ': gm.get('size', 0),
+                                'Эерэг Хувь': f"{gm.get('positive_rate', 0):.2%}",
+                                'TPR': f"{gm['true_positive_rate']:.2%}" if gm.get('true_positive_rate') is not None else 'N/A',
+                                'FPR': f"{gm['false_positive_rate']:.2%}" if gm.get('false_positive_rate') is not None else 'N/A'
+                            })
+                        st.dataframe(pd.DataFrame(group_data), width='stretch')
+            
+            # Зөвлөмжүүд
+            recommendations = fairness_results.get('recommendations', [])
+            if recommendations:
+                st.subheader(f"{ICONS['info']} Зөвлөмжүүд")
+                for rec in recommendations:
+                    if rec.strip():
+                        st.markdown(f"{ICONS['bullet']} {rec}")
 
 
 # ============================================================================

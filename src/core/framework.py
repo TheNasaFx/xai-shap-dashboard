@@ -210,6 +210,29 @@ class XAIFramework:
         self.feature_names = processed['feature_names']
         self._original_data = df
         
+        # Хамгаалагдсан атрибутуудын test өгөгдлийг хадгалах (fairness шинжилгээнд)
+        self._protected_test_data = None
+        if self._protected_attributes:
+            available = [a for a in self._protected_attributes if a in df.columns]
+            if available:
+                # Processor-ийн train_test_split индексүүдийг ашиглах
+                n_test = len(self.X_test)
+                n_total = len(df)
+                # Protected data-г feature_names-аас олох эсвэл original data-аас авах
+                if hasattr(self.data_processor, '_test_indices'):
+                    idx = self.data_processor._test_indices
+                    self._protected_test_data = df[available].iloc[idx].reset_index(drop=True)
+                else:
+                    # Fallback: protected attr feature-ийн нэрэнд байвал X_test-ээс авах
+                    attr_in_features = [a for a in available if a in self.feature_names]
+                    if attr_in_features:
+                        import pandas as _pd
+                        feat_indices = [self.feature_names.index(a) for a in attr_in_features]
+                        self._protected_test_data = _pd.DataFrame(
+                            self.X_test[:, feat_indices],
+                            columns=attr_in_features
+                        )
+        
         logger.info(f"Өгөгдөл ачаалагдлаа: {len(self.X_train)} сургалт, {len(self.X_test)} тест дээжүүд")
         logger.info(f"Шинж чанарууд: {len(self.feature_names)}")
         
@@ -476,11 +499,16 @@ class XAIFramework:
         if include_fairness and self._protected_attributes:
             from src.evaluation.fairness import FairnessEvaluator
             fairness_eval = FairnessEvaluator()
+            
+            # Хамгаалагдсан атрибутуудын өгөгдлийг авах
+            protected_data = getattr(self, '_protected_test_data', None)
+            
             results['fairness'] = fairness_eval.evaluate(
                 model=self.model,
                 X_test=self.X_test,
                 y_test=self.y_test,
-                protected_attributes=self._protected_attributes
+                protected_attributes=self._protected_attributes,
+                protected_data=protected_data
             )
         
         self._evaluation_results = results
