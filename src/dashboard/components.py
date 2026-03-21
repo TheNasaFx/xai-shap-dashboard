@@ -699,10 +699,10 @@ def render_model_section():
     col_train1, col_train2 = st.columns(2)
     
     with col_train1:
-        local_train = st.button(f"{ICONS['play']} Загвар Сургах (Локал)", type="primary", use_container_width=True)
+        local_train = st.button(f"{ICONS['play']} Загвар Сургах (Локал)", type="primary", width='stretch')
     
     with col_train2:
-        cloud_train = st.button(f"{ICONS['upload']} Google Colab-д Сургах", use_container_width=True,
+        cloud_train = st.button(f"{ICONS['upload']} Google Colab-д Сургах", width='stretch',
                                 help="Google Colab notebook үүсгэж татах. Үнэгүй GPU ашиглан том өгөгдөл дээр хурдан сургах боломжтой.")
     
     if cloud_train:
@@ -733,7 +733,7 @@ def render_model_section():
                         data=notebook_json,
                         file_name="xai_shap_cloud_training.ipynb",
                         mime="application/json",
-                        use_container_width=True
+                        width='stretch'
                     )
                     
                     st.markdown(f"""
