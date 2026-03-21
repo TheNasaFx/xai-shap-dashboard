@@ -16,10 +16,13 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import logging
+logging.basicConfig(level=logging.INFO)
+
 from typing import Any, Optional
 import numpy as np
 
 logger = logging.getLogger(__name__)
+logger.info(f"App.py started, Python {sys.version}, project_root={project_root}")
 
 
 # ============================================================================

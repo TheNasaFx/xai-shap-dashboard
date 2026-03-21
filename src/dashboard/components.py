@@ -1111,7 +1111,10 @@ def render_visualization_section():
                     kwargs['feature'] = feature
                 
                 fig = framework.visualize(plot_type=plot_type, **kwargs)
-                st.plotly_chart(fig, use_container_width=True)
+                try:
+                    st.plotly_chart(fig, width='stretch')
+                except TypeError:
+                    st.plotly_chart(fig, use_container_width=True)
                 
                 # Графикийн тайлбар
                 plot_explanations = {
