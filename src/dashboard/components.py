@@ -171,6 +171,33 @@ def inject_custom_css():
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 
+def _format_dtype(dtype) -> str:
+    """Numpy dtype-ийг хэрэглэгчдэд ойлгомжтой нэр рүү хөрвүүлэх."""
+    dtype_str = str(dtype)
+    dtype_map = {
+        'int64': 'Бүхэл тоо (int64)',
+        'int32': 'Бүхэл тоо (int32)',
+        'float64': 'Бутархай тоо (float64)',
+        'float32': 'Бутархай тоо (float32)',
+        'object': 'Текст (object)',
+        'bool': 'Тийм/Үгүй (bool)',
+        'datetime64[ns]': 'Огноо/Цаг',
+        'category': 'Ангилал (category)',
+    }
+    return dtype_map.get(dtype_str, dtype_str)
+
+
+def _format_value(value) -> str:
+    """Numpy утгыг ойлгомжтой Python утга руу хөрвүүлэх (np.int64 → int)."""
+    if isinstance(value, (np.integer,)):
+        return str(int(value))
+    elif isinstance(value, (np.floating,)):
+        return str(float(value))
+    elif isinstance(value, np.bool_):
+        return str(bool(value))
+    return str(value)
+
+
 def get_status_html(is_active: bool, active_text: str, inactive_text: str) -> str:
     """Generate status indicator HTML."""
     if is_active:
@@ -360,7 +387,7 @@ def render_data_section():
         with st.expander(f"{ICONS['info']} Баганын Дэлгэрэнгүй Мэдээлэл", expanded=False):
             col_info = pd.DataFrame({
                 'Багана': df.columns.tolist(),
-                'Төрөл': [str(dtype) for dtype in df.dtypes.values],
+                'Төрөл': [_format_dtype(dtype) for dtype in df.dtypes.values],
                 'Null Биш': df.count().values.tolist(),
                 'Өвөрмөц Утга': df.nunique().values.tolist(),
                 'Дутуу %': [f"{100*df[col].isnull().sum()/len(df):.1f}%" for col in df.columns]
@@ -392,12 +419,14 @@ def render_data_section():
             col1, col2 = st.columns(2)
             with col1:
                 st.markdown(f"**Сонгосон зорилт:** `{target_col}`")
-                st.markdown(f"**Төрөл:** {target_info.dtype}")
+                st.markdown(f"**Төрөл:** {_format_dtype(target_info.dtype)}")
             with col2:
                 unique_count = target_info.nunique()
                 st.markdown(f"**Өвөрмөц утгууд:** {unique_count}")
                 if unique_count <= 10:
-                    st.markdown(f"**Утгууд:** {list(target_info.unique()[:10])}")
+                    # numpy төрлүүдийг Python төрөл рүү хөрвүүлж харуулах
+                    clean_values = [_format_value(v) for v in target_info.unique()[:10]]
+                    st.markdown(f"**Утгууд:** {clean_values}")
         
         protected_attrs = st.multiselect(
             "Хамгаалагдсан Атрибутууд (заавал биш)",
@@ -482,6 +511,13 @@ def render_model_section():
         """, unsafe_allow_html=True)
         return
     
+    st.markdown(f"""
+    <div class="info-box">
+        Энд та ML загвар сонгож, hyperparameter тохируулан сургах боломжтой.
+        Загвар сургасны дараа <strong>Тайлбарууд</strong> болон <strong>Визуализациуд</strong> хэсэг идэвхжинэ.
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Загвар сонгох
     st.subheader("Загварын Тохиргоо")
     
@@ -502,16 +538,16 @@ def render_model_section():
     with col2:
         st.markdown("**Загварын Тайлбар:**")
         descriptions = {
-            "xgboost": f"{ICONS['bullet']} XGBoost - Хурдан, нарийвчлалтай Gradient Boosting",
-            "lightgbm": f"{ICONS['bullet']} LightGBM - Маш хурдан, том өгөгдөлд тохиромжтой",
-            "catboost": f"{ICONS['bullet']} CatBoost - Categorical өгөгдөлд сайн, overfitting багатай",
-            "random_forest": f"{ICONS['bullet']} Random Forest - Тогтвортой, тайлбарлахад хялбар",
-            "extra_trees": f"{ICONS['bullet']} Extra Trees - Random Forest-аас хурдан, санамсаргүй",
-            "gradient_boosting": f"{ICONS['bullet']} Gradient Boosting - Сонгодог sklearn boosting",
-            "adaboost": f"{ICONS['bullet']} AdaBoost - Adaptive Boosting, энгийн бөгөөд үр дүнтэй",
-            "neural_network": f"{ICONS['bullet']} Neural Network (MLP) - Нарийн хэв маягийг сурах",
-            "logistic_regression": f"{ICONS['bullet']} Logistic Regression - Шугаман, тайлбарлах боломжтой",
-            "svm": f"{ICONS['bullet']} SVM - Support Vector Machine, kernel арга"
+            "xgboost": f"{ICONS['bullet']} <strong>XGBoost</strong> — Хурдан, нарийвчлалтай. Ихэнх тохиолдолд хамгийн сайн үр дүн өгдөг. Эхлэгчдэд тохиромжтой",
+            "lightgbm": f"{ICONS['bullet']} <strong>LightGBM</strong> — Маш хурдан сургалт, том өгөгдөлд (100,000+ мөр) хамгийн тохиромжтой",
+            "catboost": f"{ICONS['bullet']} <strong>CatBoost</strong> — Текст/ангилал төрлийн баганатай өгөгдөлд шилдэг, overfitting (хэт сургалт) багатай",
+            "random_forest": f"{ICONS['bullet']} <strong>Random Forest</strong> — Тогтвортой, ойлгоход хялбар. Олон мод нэгтгэж таамаглал хийнэ",
+            "extra_trees": f"{ICONS['bullet']} <strong>Extra Trees</strong> — Random Forest-тэй төстэй боловч илүү хурдан. Санамсаргүй хуваалт хийнэ",
+            "gradient_boosting": f"{ICONS['bullet']} <strong>Gradient Boosting</strong> — Сонгодог sklearn boosting. Жижиг өгөгдөлд тогтвортой",
+            "adaboost": f"{ICONS['bullet']} <strong>AdaBoost</strong> — Энгийн бөгөөд үр дүнтэй. Буруу таамагласан дээжүүдэд анхаарал хандуулна",
+            "neural_network": f"{ICONS['bullet']} <strong>Neural Network (MLP)</strong> — Нарийн хэв маягийг сурна. Их өгөгдөл шаарддаг, /удаан/",
+            "logistic_regression": f"{ICONS['bullet']} <strong>Logistic Regression</strong> — Шугаман загвар, хамгийн хялбар тайлбарлагдана. Шугаман хамаарал бүхий өгөгдөлд тохиромжтой",
+            "svm": f"{ICONS['bullet']} <strong>SVM</strong> — Жижиг/дунд өгөгдөлд сайн. Kernel аргаар шугаман бус хамаарлыг олно"
         }
         st.markdown(f"""
         <div class="info-box">
@@ -646,10 +682,75 @@ def render_model_section():
         st.info(f"{ICONS['info']} Үндсэн тохиргоо ашиглагдана")
         params = {}
     
-    # Сургах товч
+    # Том өгөгдлийн анхааруулга
+    df = st.session_state.get('uploaded_data')
+    if df is not None and len(df) >= 10000:
+        st.markdown(f"""
+        <div class="warning-box">
+            {ICONS['warning']} <strong>Том өгөгдлийн багц ({len(df):,} мөр)</strong><br/>
+            Энэ хэмжээний өгөгдөл дээр сургалт удаан үргэлжлэх магадлалтай. 
+            <strong>Google Colab</strong>-ийн үнэгүй GPU ашиглан хурдан сургах боломжтой.
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # Сургах товч (Локал + Cloud)
     st.markdown("")  # Spacer
     
-    if st.button(f"{ICONS['play']} Загвар Сургах", type="primary", width='stretch'):
+    col_train1, col_train2 = st.columns(2)
+    
+    with col_train1:
+        local_train = st.button(f"{ICONS['play']} Загвар Сургах (Локал)", type="primary", use_container_width=True)
+    
+    with col_train2:
+        cloud_train = st.button(f"{ICONS['upload']} Google Colab-д Сургах", use_container_width=True,
+                                help="Google Colab notebook үүсгэж татах. Үнэгүй GPU ашиглан том өгөгдөл дээр хурдан сургах боломжтой.")
+    
+    if cloud_train:
+        if df is not None:
+            with st.spinner("Google Colab notebook үүсгэж байна..."):
+                try:
+                    import base64
+                    import json as _json
+                    from src.utils.cloud_training import generate_colab_notebook
+                    
+                    target_col = st.session_state.get('target_col', '')
+                    
+                    # CSV-г base64 болгох
+                    csv_bytes = df.to_csv(index=False).encode('utf-8')
+                    csv_b64 = base64.b64encode(csv_bytes).decode('utf-8')
+                    
+                    notebook = generate_colab_notebook(
+                        data_csv_base64=csv_b64,
+                        target_column=target_col,
+                        model_type=model_type,
+                        params=params,
+                    )
+                    
+                    notebook_json = _json.dumps(notebook, ensure_ascii=False, indent=2)
+                    
+                    st.download_button(
+                        label=f"{ICONS['download']} Colab Notebook Татах (.ipynb)",
+                        data=notebook_json,
+                        file_name="xai_shap_cloud_training.ipynb",
+                        mime="application/json",
+                        use_container_width=True
+                    )
+                    
+                    st.markdown(f"""
+                    <div class="success-box">
+                        <strong>{ICONS['check']} Notebook үүсгэгдлээ!</strong><br/>
+                        {ICONS['bullet']} Файлыг татаж <a href="https://colab.research.google.com" target="_blank">Google Colab</a>-д нээнэ үү<br/>
+                        {ICONS['bullet']} Runtime → Change runtime type → <strong>T4 GPU</strong> сонгоно уу<br/>
+                        {ICONS['bullet']} Бүх cell-ийг дараалан ажиллуулна уу<br/>
+                        {ICONS['bullet']} Сургалт дууссаны дараа үр дүнг автоматаар татна
+                    </div>
+                    """, unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"{ICONS['warning']} Notebook үүсгэхэд алдаа: {e}")
+        else:
+            st.warning(f"{ICONS['warning']} Эхлээд өгөгдөл ачаална уу.")
+    
+    if local_train:
         with st.spinner(f"{model_type} загвар сургаж байна... Түр хүлээнэ үү."):
             try:
                 framework.train_model(model_type=model_type, **params)
@@ -692,25 +793,46 @@ def render_model_section():
             if len(unique_values) <= 20:
                 if np.all(unique_values == unique_values.astype(int)):
                     is_classification = True
-        except:
+        except (ValueError, TypeError):
             pass
         
         col1, col2, col3 = st.columns(3)
         
         if is_classification:
-            from sklearn.metrics import accuracy_score, f1_score
-            accuracy = accuracy_score(framework.y_test, y_pred.round())
+            from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score
+            y_pred_rounded = y_pred.round()
+            accuracy = accuracy_score(framework.y_test, y_pred_rounded)
+            f1 = f1_score(framework.y_test, y_pred_rounded, average='weighted', zero_division=0)
+            precision = precision_score(framework.y_test, y_pred_rounded, average='weighted', zero_division=0)
+            recall = recall_score(framework.y_test, y_pred_rounded, average='weighted', zero_division=0)
+            
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
-                st.metric("Accuracy", f"{accuracy:.2%}")
+                st.metric("Нарийвчлал (Accuracy)", f"{accuracy:.2%}")
+            with col2:
+                st.metric("F1 Оноо", f"{f1:.4f}")
+            with col3:
+                st.metric("Precision", f"{precision:.4f}")
+            with col4:
+                st.metric("Recall", f"{recall:.4f}")
         else:
-            from sklearn.metrics import r2_score, mean_squared_error
+            from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
             r2 = r2_score(framework.y_test, y_pred)
+            rmse = np.sqrt(mean_squared_error(framework.y_test, y_pred))
+            mae = mean_absolute_error(framework.y_test, y_pred)
+            
+            col1, col2, col3 = st.columns(3)
             with col1:
-                st.metric("R² Score", f"{r2:.4f}")
+                st.metric("R² Оноо", f"{r2:.4f}")
+            with col2:
+                st.metric("RMSE", f"{rmse:.4f}")
+            with col3:
+                st.metric("MAE", f"{mae:.4f}")
         
-        with col2:
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
             st.metric("Загварын Төрөл", type(framework.model).__name__)
-        with col3:
+        with col_info2:
             st.metric("Шинж Чанарууд", len(framework.feature_names))
 
 
@@ -755,10 +877,12 @@ def render_explanation_section():
         return
     
     # SHAP тайлбар
-    st.markdown("""
+    st.markdown(f"""
     <div class="info-box">
-        <strong>SHAP (SHapley Additive exPlanations)</strong> нь загварын таамаглалыг тайлбарлах арга юм.
-        Шинж чанар бүр таамагласан утганд хэрхэн нөлөөлж байгааг харуулна.
+        <strong>SHAP (SHapley Additive exPlanations)</strong> нь тоглоомын онолд суурилсан загварын таамаглалыг тайлбарлах арга юм.<br/><br/>
+        {ICONS['bullet']} <strong>Глобал тайлбар</strong> — бүх өгөгдөл дээр шинж чанар тус бүрийн нөлөөлөл хэр хэмжээ байгааг ерөнхийд нь харуулна<br/>
+        {ICONS['bullet']} <strong>Локал тайлбар</strong> — нэг тодорхой дээжийн таамаглалд ямар шинж чанар яагаад нөлөөлснийг тайлбарлана<br/>
+        {ICONS['bullet']} <strong>Хоёр хослуулан</strong> — дээрх хоёрыг нэгэн зэрэг үүсгэнэ
     </div>
     """, unsafe_allow_html=True)
     
@@ -771,7 +895,12 @@ def render_explanation_section():
         explanation_type = st.selectbox(
             "Тайлбарын Төрөл",
             ["both", "global", "local"],
-            help="Global: Бүх өгөгдлийн ерөнхий тайлбар | Local: Тусдаа дээж бүрийн тайлбар | Both: Хоёулаа"
+            format_func=lambda x: {
+                'both': 'Хоёр хослуулан (Global + Local)',
+                'global': 'Глобал (Ерөнхий тайлбар)',
+                'local': 'Локал (Дээж тус бүрийн)'
+            }.get(x, x),
+            help="Global: Бүх өгөгдолд ямар шинж чанар хамгийн их нөлөөтэй вэ? | Local: Нэг тодорхой дээжид яагаад ийм таамаглал өгсөн вэ? | Both: Хоёулангийг зэрэг үүсгэх"
         )
     
     with col2:
@@ -813,6 +942,12 @@ def render_explanation_section():
         # Глобал тайлбарууд
         if 'global' in explanations:
             st.subheader(f"{ICONS['chart']} Глобал Шинж Чанарын Ач Холбогдол")
+            st.markdown(f"""
+            <div class="info-box">
+                Энэ хүснэгт шинж чанар бүр загварын таамаглалд <strong>ямар хэмжээгээр нөлөөлж байгаа</strong>г харуулна.
+                Дээд эрэмбэлэгдсэн шинж чанарууд загварын үр дүнд хамгийн их нөлөөтэй.
+            </div>
+            """, unsafe_allow_html=True)
             importance_data = explanations['global']['feature_importance']
             df_importance = pd.DataFrame(importance_data)
             
@@ -823,12 +958,18 @@ def render_explanation_section():
         
         # Локал тайлбарууд
         if 'local' in explanations:
-            st.subheader(f"{ICONS['target']} Локал Тайлбарууд")
+            st.subheader(f"{ICONS['target']} Локал Тайлбарууд (Дээж Тус Бүрийн)")
+            st.markdown(f"""
+            <div class="info-box">
+                Энд тус тусын дээжийн таамаглалд ямар шинж чанар <strong>ээрэг</strong> (таамаглалыг нэмэгдүүлсэн),
+                ямар нь <strong>сөрөг</strong> (таамаглалыг бууруулсан) нөлөөтэй болохыг харуулна.
+            </div>
+            """, unsafe_allow_html=True)
             
             sample_idx = st.slider(
                 "Дээж Сонгох",
                 0, len(framework.X_test) - 1, 0,
-                help="Тайлбар харах дээжийн дугаарыг сонгоно уу"
+                help="Тайлбар харах дээжийн дугаарыг сонгоно уу. Дээж бүр нь тест өгөгдлийн нэг мөр юм."
             )
             
             local_exp = explanations['local']['explanations']
@@ -836,7 +977,7 @@ def render_explanation_section():
                 exp = local_exp[sample_idx]
                 
                 st.markdown(f"**Дээж #{exp['sample_index']}**")
-                st.markdown(f"Суурь Утга: `{exp['base_value']:.4f}`")
+                st.markdown(f"Суурь Утга (E[f(x)]): `{exp['base_value']:.4f}` — загварын дундаж гаралтын утга")
                 
                 col1, col2 = st.columns(2)
                 
@@ -899,6 +1040,13 @@ def render_visualization_section():
         """, unsafe_allow_html=True)
         return
     
+    st.markdown(f"""
+    <div class="info-box">
+        SHAP утгуудыг янз бүрийн графикаар дүрслэн харах боломжтой. График бүр загварын шийдвэрийг 
+        <strong>өөр өнцгөөс</strong> тайлбарлана. Графикийн доор тайлбар гарч ирнэ.
+    </div>
+    """, unsafe_allow_html=True)
+    
     # График төрөл сонгох
     col1, col2 = st.columns([1, 2])
     
@@ -911,12 +1059,12 @@ def render_visualization_section():
     
     with col2:
         plot_descriptions = {
-            "summary": f"{ICONS['bullet']} Beeswarm график - Шинж чанар бүрийн SHAP утгын хуваарилалт",
-            "bar": f"{ICONS['bullet']} Bar диаграм - Дундаж SHAP утгаар эрэмблэсэн ач холбогдол",
-            "waterfall": f"{ICONS['bullet']} Waterfall график - Нэг таамаглалын нарийвчилсан задаргаа",
-            "heatmap": f"{ICONS['bullet']} Heatmap - Дээжүүд болон шинж чанаруудын SHAP утга",
-            "violin": f"{ICONS['bullet']} Violin график - SHAP утгын хуваарилалтын хэлбэр",
-            "dependence": f"{ICONS['bullet']} Dependence график - Шинж чанарын утга vs SHAP утга"
+            "summary": f"{ICONS['bullet']} <strong>Beeswarm</strong> — Шинж чанар бүрийн SHAP утгын тархалтыг цэг тус бүрээр харуулна. Улаан = их утга, цэнхэр = бага утга",
+            "bar": f"{ICONS['bullet']} <strong>Bar (Баганан)</strong> — Шинж чанаруудыг дундаж нөлөөгөөр эрэмбэлсэн. Аль нь хамгийн чухал болохыг шууд харуулна",
+            "waterfall": f"{ICONS['bullet']} <strong>Waterfall</strong> — Нэг дээжийн таамаглалыг алхам алхмаар задалж, шинж чанар тус бүр хэрхэн нэмсэн/хассаныг харуулна",
+            "heatmap": f"{ICONS['bullet']} <strong>Heatmap</strong> — Бүх дээж × шинж чанаруудын SHAP утгын матриц. Өнгөний далайцаар нөлөөг харна",
+            "violin": f"{ICONS['bullet']} <strong>Violin</strong> — SHAP утгын тархалтын хэлбэрийг бүлэг тус бүрээр харуулна. Тэгш хэмтэй эсэхийг шалгана",
+            "dependence": f"{ICONS['bullet']} <strong>Dependence</strong> — Нэг шинж чанарын утга өөрчлөгдөхөд таамаглал хэрхэн өөрчлөгдөхийг харуулна"
         }
         st.markdown(f"""
         <div class="info-box">
@@ -1056,10 +1204,12 @@ def render_fairness_section():
         """, unsafe_allow_html=True)
         return
     
-    st.markdown("""
+    st.markdown(f"""
     <div class="info-box">
-        <strong>Шударга байдлын шинжилгээ</strong> нь таны AI загвар өөр өөр бүлгүүдэд тэгш хандаж байгааг баталгаажуулна.
-        Энэ нь <strong>Хариуцлагатай AI</strong>-ийн чухал бүрэлдэхүүн хэсэг юм.
+        <strong>Шударга байдлын шинжилгээ</strong> нь таны AI загвар өөр өөр бүлгүүдэд тэгш хандаж байгааг шалгана.<br/><br/>
+        {ICONS['bullet']} <strong>Зорилго:</strong> Загвар хүйс, нас, үндэстэн байдлаар ялгаварлахгүй байгааг шалгах<br/>
+        {ICONS['bullet']} <strong>Арга:</strong> "Хамгаалагдсан атрибутууд" (жнь: хүйс, нас) сонгож, бүлэг тус бүр дээр хэмжигдэхүүн үдийг харьцуулна<br/>
+        {ICONS['bullet']} Энэ нь <strong>Хариуцлагатай AI (Responsible AI)</strong>-ийн чухал бүрэлдэхүүн хэсэг юм
     </div>
     """, unsafe_allow_html=True)
     
@@ -1087,15 +1237,21 @@ def render_fairness_section():
         st.markdown(f"""
         **Demographic Parity (Хүн ам зүйн Тэнцвэрт байдал)**
         
-        {ICONS['bullet']} Бүлгүүдийн хооронд эерэг таамаглалын тэнцүү хувь хэмжээ
+        {ICONS['bullet']} Загвар өөр өөр бүлгүүдэд (жишээ нь: эр, эм) эерэг таамаглал өгөх хувь ижил байх ёстой
+        
+        {ICONS['bullet']} Жишээ нь: эрэгтэй 80% зээл авсан, эмэгтэй 50% зээл авсан бол шударга бус
+        
+        **Disparate Impact (80%-ийн дүрэм)**
+        
+        {ICONS['bullet']} Хамгийн бага хувьтай бүлгийн эерэг хувь нь хамгийн их хувьтай бүлгийн 80%-аас доош байвал алагчлал байна
+        
+        {ICONS['bullet']} Харьцаа 0.8-1.0 хооронд байвал шударга гэж үзнэ
         
         **Equalized Odds (Тэнцүүлсэн Магадлал)**
         
-        {ICONS['bullet']} Бүлгүүдийн хооронд үнэн эерэг, худал эерэг хувь тэнцүү байх
+        {ICONS['bullet']} Бүлэг тус бүр дээр зөв таамагласан хувь (TPR) болон буруу таамагласан хувь (FPR) ижил байх ёстой
         
-        **Calibration (Тохируулга)**
-        
-        {ICONS['bullet']} Таамагласан магадлалууд бодит үр дүнг тусгах
+        {ICONS['bullet']} Жишээ нь: өвчин байгаа хүмүүсийг зөв олох хувь бүлэг бүрт ижил байх
         """)
     
     # Шударга байдлын үнэлгээг ажиллуулах
