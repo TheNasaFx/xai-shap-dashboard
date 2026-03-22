@@ -104,13 +104,36 @@ target_column = "{target_column}"
 X = df.drop(columns=[target_column])
 y = df[target_column]
 
+# Зорилтот баганыг шалгаж кодлох (хэрэв текст бол)
+target_encoder = None
+if y.dtype == 'object' or y.dtype.name == 'category':
+    target_encoder = LabelEncoder()
+    y = pd.Series(target_encoder.fit_transform(y.astype(str)), name=target_column)
+    print(f"Зорилтот багана кодлогдлоо: {{dict(zip(target_encoder.classes_, range(len(target_encoder.classes_))))}}")
+
+# URL, ID зэрэг ашиггүй баганнуудыг хасах
+cols_to_drop = []
+for col in X.select_dtypes(include=['object', 'category']).columns:
+    nunique = X[col].nunique()
+    # Хэрэв unique утгын тоо нийт мөрийн 50%-аас их бол ашиггүй (ID, URL гэх мэт)
+    if nunique > len(X) * 0.5:
+        cols_to_drop.append(col)
+        print(f"  Хасагдсан: '{{col}}' ({{nunique:,}} unique - ID/URL төрлийн)")
+
+if cols_to_drop:
+    X = X.drop(columns=cols_to_drop)
+
 # Categorical баганнуудыг кодлох
+label_encoders = {{}}
 for col in X.select_dtypes(include=['object', 'category']).columns:
     le = LabelEncoder()
     X[col] = le.fit_transform(X[col].astype(str))
+    label_encoders[col] = le
+    print(f"  Кодлогдсон: '{{col}}' ({{le.classes_.shape[0]}} ангилал)")
 
 # Тоон баганнуудын дутуу утгыг бөглөх
 X = X.fillna(X.median(numeric_only=True))
+X = X.fillna(0)  # Үлдсэн NaN бөглөх
 
 feature_names = X.columns.tolist()
 
@@ -310,16 +333,11 @@ def _get_model_training_code(model_type: str) -> str:
     
     codes = {
         "xgboost": """import xgboost as xgb
-from sklearn.preprocessing import LabelEncoder
 
 unique_vals = np.unique(y_train)
 is_clf = len(unique_vals) <= 20
 
 if is_clf:
-    le = LabelEncoder()
-    y_train_enc = le.fit_transform(y_train)
-    y_test_enc = le.transform(y_test)
-    
     xgb_params = {
         'n_estimators': params.get('n_estimators', 100),
         'max_depth': params.get('max_depth', 6),
@@ -330,7 +348,7 @@ if is_clf:
         'tree_method': 'gpu_hist'  # GPU ашиглах
     }
     model = xgb.XGBClassifier(**xgb_params)
-    model.fit(X_train, y_train_enc, eval_set=[(X_test, y_test_enc)], verbose=False)
+    model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
 else:
     xgb_params = {
         'n_estimators': params.get('n_estimators', 100),
