@@ -345,7 +345,8 @@ if is_clf:
         'random_state': 42,
         'n_jobs': -1,
         'verbosity': 0,
-        'tree_method': 'gpu_hist'  # GPU ашиглах
+        'tree_method': 'hist',
+        'device': 'cuda'  # GPU ашиглах
     }
     model = xgb.XGBClassifier(**xgb_params)
     model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)
@@ -356,7 +357,8 @@ else:
         'learning_rate': params.get('learning_rate', 0.1),
         'random_state': 42,
         'n_jobs': -1,
-        'tree_method': 'gpu_hist'
+        'tree_method': 'hist',
+        'device': 'cuda'
     }
     model = xgb.XGBRegressor(**xgb_params)
     model.fit(X_train, y_train, eval_set=[(X_test, y_test)], verbose=False)""",
