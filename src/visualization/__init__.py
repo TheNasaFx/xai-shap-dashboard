@@ -15,6 +15,9 @@ def __getattr__(name):
     elif name == "InteractivePlots":
         from src.visualization.interactive import InteractivePlots
         return InteractivePlots
+    elif name == "MetricsVisualizer":
+        from src.visualization.metrics_viz import MetricsVisualizer
+        return MetricsVisualizer
     elif name in ("PlotTheme", "ThemeManager"):
         from src.visualization import themes
         return getattr(themes, name)
@@ -24,6 +27,7 @@ def __getattr__(name):
 __all__ = [
     "XAIVisualizer",
     "InteractivePlots",
+    "MetricsVisualizer",
     "PlotTheme",
     "ThemeManager",
 ]

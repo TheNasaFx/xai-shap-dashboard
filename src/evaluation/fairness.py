@@ -12,6 +12,8 @@ import logging
 from typing import Any, Dict, List, Optional
 import numpy as np
 import pandas as pd
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from src.utils.helpers import predict_with_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -300,7 +302,8 @@ class FairnessEvaluator:
         X_test: np.ndarray,
         y_test: np.ndarray,
         protected_attributes: List[str],
-        protected_data: Optional[pd.DataFrame] = None
+        protected_data: Optional[pd.DataFrame] = None,
+        decision_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Comprehensive fairness evaluation.
@@ -317,7 +320,7 @@ class FairnessEvaluator:
         """
         logger.info("Running fairness evaluation...")
         
-        y_pred = model.predict(X_test)
+        y_pred = predict_with_threshold(model, X_test, decision_threshold)
         
         # If no protected data, return basic metrics
         if protected_data is None or not protected_attributes:
@@ -332,6 +335,7 @@ class FairnessEvaluator:
         
         results = {
             'protected_attributes': protected_attributes,
+            'decision_threshold': float(decision_threshold) if decision_threshold is not None else None,
             'metrics_by_attribute': {},
             'overall_fairness': True,
             'recommendations': []
@@ -380,6 +384,12 @@ class FairnessEvaluator:
             
             # Positive prediction rate
             positive_rate = np.mean(group_pred)
+
+            # Group-level predictive performance
+            accuracy = accuracy_score(group_true, group_pred)
+            precision = precision_score(group_true, group_pred, zero_division=0)
+            recall = recall_score(group_true, group_pred, zero_division=0)
+            f1 = f1_score(group_true, group_pred, zero_division=0)
             
             # True positive rate (if applicable)
             positive_mask = group_true == 1
@@ -398,12 +408,20 @@ class FairnessEvaluator:
             group_metrics[str(group)] = {
                 'size': int(group_size),
                 'positive_rate': float(positive_rate),
+                'accuracy': float(accuracy),
+                'precision': float(precision),
+                'recall': float(recall),
+                'f1': float(f1),
                 'true_positive_rate': float(tpr) if tpr is not None else None,
                 'false_positive_rate': float(fpr) if fpr is not None else None
             }
         
         # Calculate fairness metrics
         positive_rates = [g['positive_rate'] for g in group_metrics.values()]
+        accuracies = [g['accuracy'] for g in group_metrics.values()]
+        precisions = [g['precision'] for g in group_metrics.values()]
+        recalls = [g['recall'] for g in group_metrics.values()]
+        f1_scores = [g['f1'] for g in group_metrics.values()]
         
         if len(positive_rates) >= 2:
             # Demographic parity
@@ -414,17 +432,38 @@ class FairnessEvaluator:
             disparate_impact = dp_ratio
             
             is_fair = disparate_impact >= self.threshold
+            accuracy_gap = max(accuracies) - min(accuracies)
+            precision_gap = max(precisions) - min(precisions)
+            recall_gap = max(recalls) - min(recalls)
+            f1_gap = max(f1_scores) - min(f1_scores)
         else:
             dp_ratio = 1.0
             dp_difference = 0.0
             disparate_impact = 1.0
             is_fair = True
+            accuracy_gap = 0.0
+            precision_gap = 0.0
+            recall_gap = 0.0
+            f1_gap = 0.0
+
+        worst_group_by_f1 = None
+        best_group_by_f1 = None
+        if group_metrics:
+            sorted_by_f1 = sorted(group_metrics.items(), key=lambda item: item[1]['f1'])
+            worst_group_by_f1 = sorted_by_f1[0][0]
+            best_group_by_f1 = sorted_by_f1[-1][0]
         
         return {
             'group_metrics': group_metrics,
             'demographic_parity_ratio': float(dp_ratio),
             'demographic_parity_difference': float(dp_difference),
             'disparate_impact': float(disparate_impact),
+            'accuracy_gap': float(accuracy_gap),
+            'precision_gap': float(precision_gap),
+            'recall_gap': float(recall_gap),
+            'f1_gap': float(f1_gap),
+            'worst_group_by_f1': worst_group_by_f1,
+            'best_group_by_f1': best_group_by_f1,
             'is_fair': is_fair,
             'threshold': self.threshold
         }
@@ -438,7 +477,7 @@ class FairnessEvaluator:
         
         if not results['overall_fairness']:
             recommendations.append(
-                "⚠️ Model shows potential unfairness. Consider the following:"
+                "[!] Model shows potential unfairness. Consider the following:"
             )
             
             for attr, metrics in results['metrics_by_attribute'].items():
@@ -460,7 +499,7 @@ class FairnessEvaluator:
             ])
         else:
             recommendations.append(
-                "✅ Model meets fairness threshold for all protected attributes."
+                "[OK] Model meets fairness threshold for all protected attributes."
             )
             recommendations.append(
                 "Continue monitoring for fairness as data and model evolve."
@@ -548,7 +587,7 @@ class FairnessEvaluator:
         """Generate Markdown fairness report."""
         lines = ["# Fairness Evaluation Report\n"]
         
-        status = "✅ Pass" if results.get('overall_fairness', False) else "⚠️ Needs Attention"
+        status = "[PASS]" if results.get('overall_fairness', False) else "[ATTENTION]"
         lines.append(f"**Overall Status:** {status}\n")
         
         for attr, metrics in results.get('metrics_by_attribute', {}).items():

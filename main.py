@@ -61,7 +61,7 @@ def generate_data():
     get_breast_cancer_dataset("data/sample/breast_cancer.csv")
     generate_employee_attrition_dataset(1000, "data/sample/employee_attrition.csv")
     
-    print("✅ Жишээ өгөгдлийн багцууд data/sample/ хавтаст үүсгэгдлээ")
+    print("[OK] Жишээ өгөгдлийн багцууд data/sample/ хавтаст үүсгэгдлээ")
 
 
 def main():

@@ -16,6 +16,7 @@ from sklearn.metrics import (
     roc_auc_score, mean_squared_error, mean_absolute_error, r2_score,
     confusion_matrix, classification_report
 )
+from src.utils.helpers import get_binary_probability_scores, predict_with_threshold
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +113,8 @@ class ModelEvaluator:
         X_test: np.ndarray,
         y_test: np.ndarray,
         shap_values: Optional[np.ndarray] = None,
-        task_type: Optional[str] = None
+        task_type: Optional[str] = None,
+        decision_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Загварын иж бүрэн үнэлгээ.
@@ -139,13 +141,18 @@ class ModelEvaluator:
         }
         
         # Таамаглалуудыг авах
-        y_pred = model.predict(X_test)
+        if task_type == 'classification':
+            y_pred = predict_with_threshold(model, X_test, decision_threshold)
+            y_proba = get_binary_probability_scores(model, X_test)
+            if decision_threshold is not None and y_proba is not None:
+                results['шийдвэрийн_босго'] = float(decision_threshold)
+        else:
+            y_pred = model.predict(X_test)
+            y_proba = None
         
         # Даалгаврын төрлөөс хамаарсан хэмжигдэхүүнүүд
         if task_type == 'classification':
-            results['classification'] = self._evaluate_classification(
-                model, X_test, y_test, y_pred
-            )
+            results['classification'] = self._evaluate_classification(y_test, y_pred, y_proba)
         else:
             results['regression'] = self._evaluate_regression(y_test, y_pred)
         
@@ -162,10 +169,9 @@ class ModelEvaluator:
     
     def _evaluate_classification(
         self,
-        model: Any,
-        X_test: np.ndarray,
         y_test: np.ndarray,
-        y_pred: np.ndarray
+        y_pred: np.ndarray,
+        y_proba: Optional[np.ndarray] = None,
     ) -> Dict[str, Any]:
         """Classification загварыг үнэлэх."""
         metrics = {
@@ -176,11 +182,9 @@ class ModelEvaluator:
         }
         
         # Binary classification-д AUC
-        if len(np.unique(y_test)) == 2:
+        if len(np.unique(y_test)) == 2 and y_proba is not None:
             try:
-                if hasattr(model, 'predict_proba'):
-                    y_proba = model.predict_proba(X_test)[:, 1]
-                    metrics['roc_auc'] = float(roc_auc_score(y_test, y_proba))
+                metrics['roc_auc'] = float(roc_auc_score(y_test, y_proba))
             except Exception as e:
                 logger.warning(f"AUC тооцоолж чадсангүй: {e}")
         

@@ -9,6 +9,7 @@ Author: XAI-SHAP Framework
 
 import pytest
 import numpy as np
+import pandas as pd
 
 import sys
 from pathlib import Path
@@ -128,6 +129,40 @@ class TestFairnessEvaluator:
         
         assert 'true_positive_rate_difference' in result
         assert 'false_positive_rate_difference' in result
+
+    def test_evaluate_includes_group_performance_gaps(self, evaluator):
+        """Test that fairness evaluation exposes per-group performance metrics and gap summaries."""
+
+        class DummyBinaryModel:
+            def __init__(self, predictions):
+                self._predictions = np.array(predictions)
+
+            def predict(self, X):
+                return self._predictions[:len(X)]
+
+        y_true = np.array([1, 1, 0, 0, 1, 0])
+        y_pred = np.array([1, 0, 0, 1, 1, 0])
+        protected = pd.DataFrame({'group': np.array([0, 0, 0, 1, 1, 1])})
+        X_test = np.zeros((len(y_true), 2))
+
+        result = evaluator.evaluate(
+            model=DummyBinaryModel(y_pred),
+            X_test=X_test,
+            y_test=y_true,
+            protected_attributes=['group'],
+            protected_data=protected,
+        )
+
+        group_metrics = result['metrics_by_attribute']['group']['group_metrics']
+
+        assert 'accuracy' in group_metrics['0']
+        assert 'precision' in group_metrics['0']
+        assert 'recall' in group_metrics['1']
+        assert 'f1' in group_metrics['1']
+        assert 'accuracy_gap' in result['metrics_by_attribute']['group']
+        assert 'f1_gap' in result['metrics_by_attribute']['group']
+        assert result['metrics_by_attribute']['group']['worst_group_by_f1'] in {'0', '1'}
+        assert result['metrics_by_attribute']['group']['best_group_by_f1'] in {'0', '1'}
 
 
 class TestBiasDetector:

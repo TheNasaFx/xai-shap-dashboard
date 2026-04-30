@@ -105,6 +105,7 @@ class XAIFramework:
         self.feature_names = None
         self.model = None
         self.shap_values = None
+        self.processing_info = None
         
         self._setup_logging()
         logger.info("XAIFramework эхэлсэн")
@@ -208,6 +209,7 @@ class XAIFramework:
         self.y_train = processed['y_train']
         self.y_test = processed['y_test']
         self.feature_names = processed['feature_names']
+        self.processing_info = processed.get('processing_info', {})
         self._original_data = df
         
         # Хамгаалагдсан атрибутуудын test өгөгдлийг хадгалах (fairness шинжилгээнд)
@@ -469,7 +471,8 @@ class XAIFramework:
     
     def evaluate(
         self,
-        include_fairness: bool = True
+        include_fairness: bool = True,
+        decision_threshold: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Хариуцлагатай AI хэмжигдэхүүнүүдийг оролцуулсан иж бүрэн загварын үнэлгээ.
@@ -493,7 +496,8 @@ class XAIFramework:
             model=self.model,
             X_test=self.X_test,
             y_test=self.y_test,
-            shap_values=self.shap_values
+            shap_values=self.shap_values,
+            decision_threshold=decision_threshold,
         )
         
         if include_fairness and self._protected_attributes:
@@ -508,7 +512,8 @@ class XAIFramework:
                 X_test=self.X_test,
                 y_test=self.y_test,
                 protected_attributes=self._protected_attributes,
-                protected_data=protected_data
+                protected_data=protected_data,
+                decision_threshold=decision_threshold,
             )
         
         self._evaluation_results = results

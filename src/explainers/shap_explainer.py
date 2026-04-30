@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import pandas as pd
 import shap
+from src.utils.helpers import get_shap_prediction_callable, unwrap_model_for_shap
 
 logger = logging.getLogger(__name__)
 
@@ -176,20 +177,13 @@ class SHAPExplainer:
         Буцаах:
             SHAP explainer instance
         """
-        model_type = type(model).__name__.lower()
-        
-        # Pipeline бол дотор нь байгаа загварыг авах
-        actual_model = model
-        if 'pipeline' in model_type:
-            # Pipeline-ийн сүүлийн step нь загвар
-            actual_model = model.steps[-1][1]
-            model_type = type(actual_model).__name__.lower()
-            logger.info(f"Pipeline дотор {type(actual_model).__name__} загвар олдлоо")
+        actual_model, model_type = unwrap_model_for_shap(model)
+        prediction_callable = get_shap_prediction_callable(model, actual_model)
         
         if self.explainer_type != "auto":
             # Тодорхойлсон explainer төрлийг ашиглах
             return self._create_specific_explainer(
-                self.explainer_type, model, background
+                self.explainer_type, model, actual_model, prediction_callable, background
             )
         
         # Tree-based загварууд
@@ -204,13 +198,13 @@ class SHAPExplainer:
             try:
                 return shap.TreeExplainer(actual_model)
             except Exception as e:
-                logger.warning(f"TreeExplainer амжилтгүй: {e}. Explainer руу шилжиж байна")
-                return shap.Explainer(model, background)
+                logger.warning(f"TreeExplainer амжилтгүй: {e}. Callable Explainer руу шилжиж байна")
+                return shap.Explainer(prediction_callable, background)
         
         # Neural Network загварууд
         elif 'mlp' in model_type or 'neural' in model_type:
             logger.info("Neural network-д KernelExplainer ашиглаж байна")
-            return shap.KernelExplainer(model.predict, background)
+            return shap.KernelExplainer(prediction_callable, background)
         
         # Шугаман загварууд (Logistic Regression, Ridge, ElasticNet)
         elif any(linear_type in model_type for linear_type in 
@@ -227,39 +221,37 @@ class SHAPExplainer:
                 return shap.LinearExplainer(actual_model, background)
             except Exception as e:
                 logger.warning(f"LinearExplainer амжилтгүй: {e}. KernelExplainer руу шилжиж байна")
-                return shap.KernelExplainer(model.predict, background)
+                return shap.KernelExplainer(prediction_callable, background)
         
         # SVM загварууд
         elif any(svm_type in model_type for svm_type in ['svc', 'svr', 'svm']):
             logger.info(f"SVM загвар ({type(actual_model).__name__}) KernelExplainer ашиглаж байна")
-            # SVM-д KernelExplainer ашиглах (удаан боловч найдвартай)
-            if hasattr(model, 'predict_proba'):
-                return shap.KernelExplainer(model.predict_proba, background)
-            else:
-                return shap.KernelExplainer(model.predict, background)
+            return shap.KernelExplainer(prediction_callable, background)
         
         else:
             # Автоматаар хамгийн сайн аргыг сонгох Explainer-г ашиглах
             logger.info(f"Автоматаар илрүүлсэн Explainer ашиглаж байна ({type(actual_model).__name__})")
-            return shap.Explainer(model, background)
-    
+            return shap.Explainer(prediction_callable, background)
+
     def _create_specific_explainer(
         self,
         explainer_type: str,
         model: Any,
+        actual_model: Any,
+        prediction_callable,
         background: np.ndarray
     ) -> shap.Explainer:
         """Тодорхой explainer төрөл үүсгэх."""
         if explainer_type == "tree":
-            return shap.TreeExplainer(model)
+            return shap.TreeExplainer(actual_model)
         elif explainer_type == "kernel":
-            return shap.KernelExplainer(model.predict, background)
+            return shap.KernelExplainer(prediction_callable, background)
         elif explainer_type == "deep":
-            return shap.DeepExplainer(model, background)
+            return shap.DeepExplainer(actual_model, background)
         elif explainer_type == "linear":
-            return shap.LinearExplainer(model, background)
+            return shap.LinearExplainer(actual_model, background)
         else:
-            return shap.Explainer(model, background)
+            return shap.Explainer(prediction_callable, background)
     
     def _compute_global_explanation(
         self,

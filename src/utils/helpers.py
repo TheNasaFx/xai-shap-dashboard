@@ -9,7 +9,8 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any, Callable, Dict, Optional, Tuple, Union
+import numpy as np
 import yaml
 
 
@@ -135,3 +136,119 @@ def truncate_string(s: str, max_length: int = 50) -> str:
     if len(s) <= max_length:
         return s
     return s[:max_length - 3] + "..."
+
+
+def unwrap_model_for_shap(model: Any) -> Tuple[Any, str]:
+    """Return the concrete estimator that SHAP should inspect."""
+    actual_model = model
+
+    if hasattr(actual_model, 'model'):
+        try:
+            nested_model = actual_model.model
+        except Exception:
+            nested_model = None
+
+        if nested_model is not None:
+            actual_model = nested_model
+
+    model_type = type(actual_model).__name__.lower()
+    if 'pipeline' in model_type and hasattr(actual_model, 'steps') and actual_model.steps:
+        actual_model = actual_model.steps[-1][1]
+        model_type = type(actual_model).__name__.lower()
+
+    return actual_model, model_type
+
+
+def get_shap_prediction_callable(
+    model: Any,
+    actual_model: Optional[Any] = None
+) -> Callable[..., Any]:
+    """Return a callable prediction function for SHAP fallback explainers."""
+    actual_model = actual_model if actual_model is not None else unwrap_model_for_shap(model)[0]
+    prediction_model = model if hasattr(model, 'predict') else actual_model
+
+    if hasattr(prediction_model, 'predict_proba'):
+        def predict_fn(X):
+            probabilities = prediction_model.predict_proba(X)
+            if probabilities is None:
+                return prediction_model.predict(X)
+            return probabilities
+
+        return predict_fn
+
+    if hasattr(prediction_model, 'predict'):
+        return prediction_model.predict
+
+    if callable(actual_model):
+        return actual_model
+
+    raise TypeError(f"SHAP callable үүсгэж чадсангүй: {type(model).__name__}")
+
+
+def get_binary_probability_scores(model: Any, X: np.ndarray) -> Optional[np.ndarray]:
+    """Return positive-class probabilities for binary classifiers when available."""
+    actual_model = unwrap_model_for_shap(model)[0]
+    prediction_model = model if hasattr(model, 'predict_proba') else actual_model
+
+    if not hasattr(prediction_model, 'predict_proba'):
+        return None
+
+    probabilities = np.asarray(prediction_model.predict_proba(X))
+    if probabilities.ndim == 1:
+        return probabilities.astype(float)
+    if probabilities.ndim == 2 and probabilities.shape[1] == 1:
+        return probabilities[:, 0].astype(float)
+    if probabilities.ndim == 2 and probabilities.shape[1] == 2:
+        return probabilities[:, 1].astype(float)
+
+    return None
+
+
+def predict_with_threshold(
+    model: Any,
+    X: np.ndarray,
+    decision_threshold: Optional[float] = None,
+) -> np.ndarray:
+    """Predict labels, optionally overriding the default 0.5 decision threshold."""
+    if decision_threshold is None:
+        return np.asarray(model.predict(X))
+
+    probability_scores = get_binary_probability_scores(model, X)
+    if probability_scores is None:
+        return np.asarray(model.predict(X))
+
+    return (probability_scores >= float(decision_threshold)).astype(int)
+
+
+def create_shap_explainer(model: Any, background: np.ndarray) -> Any:
+    """Create a SHAP explainer that works with wrapper models."""
+    import shap
+
+    actual_model, model_type = unwrap_model_for_shap(model)
+    prediction_callable = get_shap_prediction_callable(model, actual_model)
+    tree_types = [
+        'xgb', 'lgb', 'lightgbm', 'catboost',
+        'randomforest', 'extratrees', 'decisiontree',
+        'gradientboosting', 'adaboost', 'bagging'
+    ]
+
+    if any(tree_type in model_type for tree_type in tree_types):
+        try:
+            return shap.TreeExplainer(actual_model)
+        except Exception:
+            pass
+
+    return shap.Explainer(prediction_callable, background)
+
+
+def extract_shap_values(explainer: Any, X: np.ndarray) -> np.ndarray:
+    """Normalize SHAP values across old and new SHAP APIs."""
+    if hasattr(explainer, 'shap_values'):
+        shap_values = explainer.shap_values(X)
+    else:
+        shap_values = explainer(X).values
+
+    if isinstance(shap_values, list):
+        shap_values = shap_values[1] if len(shap_values) > 1 else shap_values[0]
+
+    return np.asarray(shap_values)

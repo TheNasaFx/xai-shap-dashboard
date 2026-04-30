@@ -210,27 +210,27 @@ class ReportGenerator:
 </head>
 <body>
     <div class="container">
-        <h1>🔍 {data['title']}</h1>
+        <h1>{data['title']}</h1>
         <p class="meta">Generated: {data['generated_at']} | Framework v{data['framework_version']}</p>
     </div>
     
     <div class="container">
-        <h2>📊 Data Summary</h2>
+        <h2>Data Summary</h2>
         {self._format_data_summary_html(data['data_summary'])}
     </div>
     
     <div class="container">
-        <h2>🤖 Model Information</h2>
+        <h2>Model Information</h2>
         {self._format_model_info_html(data['model_info'])}
     </div>
     
     <div class="container">
-        <h2>🔍 Explanation Summary</h2>
+        <h2>Explanation Summary</h2>
         {self._format_explanation_html(data['explanation_summary'])}
     </div>
     
     <div class="container">
-        <h2>📈 Evaluation Results</h2>
+        <h2>Evaluation Results</h2>
         {self._format_evaluation_html(data['evaluation_results'])}
     </div>
     
